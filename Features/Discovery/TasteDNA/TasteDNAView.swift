@@ -412,7 +412,7 @@ public final class TasteDNAViewModel: ObservableObject {
         isLoading = true
         
         // Fetch tracks from library
-        let tracks = (try? await libraryEngine.fetchTracks(predicate: nil)) ?? []
+        let tracks = (try? await libraryEngine.fetchAllTracks()) ?? []
         
         if tracks.isEmpty {
             // Generate mock profile for preview if no tracks
