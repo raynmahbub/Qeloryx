@@ -1,10 +1,11 @@
-name: Release — QELORYX Dev → Beta → RC → Stable
+name: Release — QELORYX Official Sequence — Dev → Alpha → Beta → RC → Stable
 
 on:
   push:
     tags:
       - 'v*'
       - 'v*-dev*'
+      - 'v*-alpha*'
       - 'v*-beta*'
       - 'v*-rc*'
       - '1.0.0'
@@ -13,41 +14,43 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., 1.0.0-dev.1, 1.0.0-beta.1, 1.0.0-rc.1, 1.0.0)'
+        description: 'Release version (e.g., 1.0.0-dev.1, 1.0.0-alpha.1, 1.0.0-beta.1, 1.0.0-rc.1, 1.0.0)'
         required: true
         default: '1.0.0-dev.1'
         type: string
       channel:
-        description: 'Release channel'
+        description: 'Release channel — Official Sequence'
         required: true
         default: 'dev'
         type: choice
         options:
           - dev
+          - alpha
           - beta
           - rc
           - stable
       prerelease:
-        description: 'Is prerelease? (auto-detected from channel if not set)'
+        description: 'Is prerelease? (auto-detected from channel)'
         required: false
         default: false
         type: boolean
 
 jobs:
   detect-channel:
-    name: Detect Release Channel — Dev/Beta/RC/Stable
+    name: Detect Channel — Official Sequence
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.detect.outputs.version }}
       channel: ${{ steps.detect.outputs.channel }}
       prerelease: ${{ steps.detect.outputs.prerelease }}
       name: ${{ steps.detect.outputs.name }}
+      order: ${{ steps.detect.outputs.order }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: Detect Channel from Tag/Inputs
+      - name: Detect Official Release Channel
         id: detect
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -56,9 +59,11 @@ jobs:
           else
             TAG=${GITHUB_REF#refs/tags/}
             VERSION=${TAG#v}
-            # Auto-detect channel from version string
+            # Official sequence detection — order: dev(1) < alpha(2) < beta(3) < rc(4) < stable(5)
             if [[ "$VERSION" == *"-dev"* ]]; then
               CHANNEL="dev"
+            elif [[ "$VERSION" == *"-alpha"* ]]; then
+              CHANNEL="alpha"
             elif [[ "$VERSION" == *"-beta"* ]]; then
               CHANNEL="beta"
             elif [[ "$VERSION" == *"-rc"* ]]; then
@@ -68,22 +73,36 @@ jobs:
             fi
           fi
           
-          # Determine prerelease flag
-          if [ "$CHANNEL" = "stable" ]; then
-            PRERELEASE="false"
-            NAME="QELORYX $VERSION — Hear Beyond. Build Beyond. — Stable"
-          elif [ "$CHANNEL" = "rc" ]; then
-            PRERELEASE="true"
-            NAME="QELORYX $VERSION — RC — Release Candidate"
-          elif [ "$CHANNEL" = "beta" ]; then
-            PRERELEASE="true"
-            NAME="QELORYX $VERSION — Beta — TestFlight Ready"
-          else
-            PRERELEASE="true"
-            NAME="QELORYX $VERSION — Dev — Internal Testing"
-          fi
+          # Official sequence order and prerelease flag
+          case $CHANNEL in
+            dev)
+              PRERELEASE="true"
+              NAME="QELORYX $VERSION — Dev — Nightly — Internal"
+              ORDER="1/5 — Dev"
+              ;;
+            alpha)
+              PRERELEASE="true"
+              NAME="QELORYX $VERSION — Alpha — Internal Testing"
+              ORDER="2/5 — Alpha"
+              ;;
+            beta)
+              PRERELEASE="true"
+              NAME="QELORYX $VERSION — Beta — TestFlight"
+              ORDER="3/5 — Beta"
+              ;;
+            rc)
+              PRERELEASE="true"
+              NAME="QELORYX $VERSION — RC — Release Candidate — Final Verification"
+              ORDER="4/5 — RC"
+              ;;
+            stable)
+              PRERELEASE="false"
+              NAME="QELORYX $VERSION — Stable — App Store — GA"
+              ORDER="5/5 — Stable"
+              ;;
+          esac
           
-          # Override if manual prerelease input set for workflow_dispatch
+          # Override if manual prerelease input set
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
             PRERELEASE="true"
           fi
@@ -92,16 +111,21 @@ jobs:
           echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
           echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "order=$ORDER" >> $GITHUB_OUTPUT
           
-          echo "=== Release Detection ==="
+          echo "=== Official Release Sequence Detection ==="
           echo "Version: $VERSION"
           echo "Channel: $CHANNEL"
+          echo "Order: $ORDER"
           echo "Prerelease: $PRERELEASE"
           echo "Name: $NAME"
           echo "Tag: ${GITHUB_REF#refs/tags/}"
+          echo ""
+          echo "Official Sequence: Dev(1) → Alpha(2) → Beta(3) → RC(4) → Stable(5)"
+          echo "Current: $ORDER"
 
   create-release:
-    name: Create Release — ${{ needs.detect-channel.outputs.channel }}
+    name: Create Release — ${{ needs.detect-channel.outputs.order }}
     needs: detect-channel
     runs-on: ubuntu-latest
     permissions:
@@ -111,21 +135,23 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Generate Release Notes — ${{ needs.detect-channel.outputs.channel }}
+      - name: Generate Official Release Notes — ${{ needs.detect-channel.outputs.channel }}
         run: |
           VERSION="${{ needs.detect-channel.outputs.version }}"
           CHANNEL="${{ needs.detect-channel.outputs.channel }}"
+          ORDER="${{ needs.detect-channel.outputs.order }}"
           
-          echo "Generating release notes for $VERSION channel $CHANNEL"
+          echo "Generating official release notes for $VERSION channel $CHANNEL order $ORDER"
           
-          # Common header
+          # Common header — Official Sequence
           cat > release_notes.md << HEADER
           # QELORYX $VERSION — Hear Beyond. Build Beyond.
           
           ## Project ASTRYX — Premium offline-first music platform
           **Company:** Qeloryx Labs
           **Version:** $VERSION
-          **Channel:** $CHANNEL
+          **Channel:** $CHANNEL ($ORDER)
+          **Official Sequence:** Dev → Alpha → Beta → RC → Stable
           **Theme:** Midnight Aurora
           **Strategy:** Greenfield
           
@@ -133,97 +159,237 @@ jobs:
           
           HEADER
           
-          # Channel-specific notes
+          # Channel-specific — Official Sequence Implementation
           if [ "$CHANNEL" = "dev" ]; then
           cat >> release_notes.md << DEV
-          ## 🚧 Dev Build — Internal Testing — $VERSION
+          ## 🚧 Dev — Nightly — Internal — $VERSION — 1/5
           
-          **Channel:** Dev — Internal development build for core team testing
-          **Stability:** Experimental — May contain unfinished features, debug logs, known issues
-          **Distribution:** Internal — Direct install, not for TestFlight/App Store
+          **Official Sequence Position:** 1/5 — Dev — First stage
+          **Stability:** Experimental — May break, debug logs, unfinished features
+          **Distribution:** Internal — Core team only, direct install
+          **Purpose:** Daily builds from \`arena/*\` branches, fast iteration, catch obvious crashes early
+          
+          ### Official Sequence Context
+          \`\`\`
+          Dev (1/5) → Alpha (2/5) → Beta (3/5) → RC (4/5) → Stable (5/5)
+            ↑ YOU ARE HERE — Dev — Start of official sequence
+          \`\`\`
           
           ### What's in Dev?
-          - Latest commits from \`arena/01a0e693-qeloryx\` branch
+          - Latest commits from arena branch
           - All 5 pillars under active development
-          - Debug logging enabled
-          - Performance monitoring active
-          - All engines: Player, Library DNA, Taste DNA, Audio Lab, Spaces
+          - Debug logging enabled, performance monitoring active
+          - May contain TODOs, unfinished UI, known crashes
+          - Not feature complete — expected
           
-          ### Dev Testing Checklist
-          - [ ] Cold Launch <1.5s
-          - [ ] Warm Launch <0.6s
-          - [ ] Search <50ms
-          - [ ] Library Open <200ms
-          - [ ] Play/Pause Instant + Haptics <10ms
-          - [ ] Queue Instant
-          - [ ] Seek <50ms
-          - [ ] Lyrics Sync <50ms
-          - [ ] Downloads state machine
-          - [ ] No crash on 5 tabs navigation
+          ### Dev Entry Criteria
+          - Code compiles — 107 Swift files
+          - App launches without immediate crash
           
-          ### Known Issues (Dev)
-          - May have unfinished UI polish
-          - Debug logs may affect performance slightly
-          - Some edge cases not yet handled
+          ### Dev Exit Criteria — Must Pass Before Alpha
+          - [ ] App launches without crash
+          - [ ] 5 tabs navigate without crash
+          - [ ] No obvious memory leaks in 5 min use
+          - [ ] Build passes, tests pass
+          - [ ] Cold Launch <2s (relaxed for dev), Search <100ms (relaxed)
           
-          ### Next: Beta
-          After dev verification → \`v1.0.0-beta.1\` for TestFlight external testing
+          ### Dev Testing Checklist (Relaxed)
+          - [ ] Launch → no crash
+          - [ ] Navigate Library/Search/Discovery/Home/Downloads
+          - [ ] Play a track → Play/Pause/Seek
+          - [ ] Search a track
+          - [ ] Check logs for obvious errors
+          
+          ### Known Issues (Dev — Expected)
+          - Unfinished UI polish — expected
+          - Debug logs affect performance slightly — expected
+          - Some edge cases not handled — expected
+          - May crash on rare flows — report and fix for next dev iteration
+          
+          ### Next in Official Sequence: Alpha
+          After dev verification → \`v1.0.0-alpha.1\` — Internal testing, features testable
+          
+          **Command for next:**
+          \`\`\`bash
+          git tag -a v1.0.0-alpha.1 -m "QELORYX v1.0.0-alpha.1 — Alpha — Internal Testing — Features testable"
+          git push origin v1.0.0-alpha.1
+          \`\`\`
           
           DEV
+          elif [ "$CHANNEL" = "alpha" ]; then
+          cat >> release_notes.md << ALPHA
+          ## 🔬 Alpha — Internal Testing — $VERSION — 2/5
+          
+          **Official Sequence Position:** 2/5 — Alpha — Second stage
+          **Stability:** Alpha — Features testable but not feature complete, internal QA
+          **Distribution:** Internal — Core team + QA, direct install + TestFlight internal
+          **Purpose:** Internal QA, feature testing, stability check before external beta
+          
+          ### Official Sequence Context
+          \`\`\`
+          Dev (1/5) → Alpha (2/5) → Beta (3/5) → RC (4/5) → Stable (5/5)
+                     ↑ YOU ARE HERE — Alpha — Internal QA
+          \`\`\`
+          
+          ### What's in Alpha?
+          - Features testable — Player, Library, Search, Lyrics, Downloads, Discovery implemented
+          - Not yet feature complete — some polish may be missing
+          - Internal QA focus — stability, basic flows
+          - Debug logs reduced vs dev
+          - Performance budgets checked but relaxed (e.g., Cold <1.5s target but <2s OK for alpha)
+          
+          ### Alpha Entry Criteria — Must Have Passed Dev Exit
+          - Dev exit criteria all passed
+          - No crash on 5 tabs navigation
+          - Basic playback works
+          
+          ### Alpha Exit Criteria — Must Pass Before Beta
+          - [ ] All 5 pillars testable — Player, Library, Search, Lyrics, Downloads, Discovery
+          - [ ] Cold Launch <1.5s ✅ (strict from alpha onwards)
+          - [ ] Warm Launch <0.6s ✅
+          - [ ] Search <50ms ✅
+          - [ ] Library Open <200ms ✅
+          - [ ] Play/Pause/Seek/Queue work without crash
+          - [ ] No crash in 30 min continuous internal use
+          - [ ] No critical bugs (crash, data loss)
+          - [ ] Build passes 107 files, tests pass
+          
+          ### Alpha Testing Checklist
+          - [ ] Cold Launch <1.5s, Warm <0.6s
+          - [ ] Library scan 1000 tracks <200ms open
+          - [ ] Search 1000 tracks <50ms
+          - [ ] Player: Play/Pause/Seek/Next/Prev/Shuffle/Repeat
+          - [ ] Queue: Add/Remove/Reorder
+          - [ ] Downloads: Enqueue/Pause/Resume/Cancel
+          - [ ] Lyrics: Synced/Karaoke display
+          - [ ] Discovery: Taste DNA profile generation
+          - [ ] 5 tabs navigation 10 times no crash
+          - [ ] Background playback 15 min
+          
+          ### Known Issues (Alpha — Should be minor)
+          - UI polish may still be in progress
+          - Edge cases may still exist
+          - Performance should meet budgets but verify
+          
+          ### Next in Official Sequence: Beta
+          After alpha verification → \`v1.0.0-beta.1\` — Feature complete, TestFlight external
+          
+          **Command for next:**
+          \`\`\`bash
+          git tag -a v1.0.0-beta.1 -m "QELORYX v1.0.0-beta.1 — Beta — TestFlight Ready — Feature complete"
+          git push origin v1.0.0-beta.1
+          \`\`\`
+          
+          ALPHA
           elif [ "$CHANNEL" = "beta" ]; then
           cat >> release_notes.md << BETA
-          ## 🧪 Beta Build — TestFlight Ready — $VERSION
+          ## 🧪 Beta — TestFlight — External Testing — $VERSION — 3/5
           
-          **Channel:** Beta — External beta testing via TestFlight
+          **Official Sequence Position:** 3/5 — Beta — Third stage
           **Stability:** Beta — Feature complete, needs external feedback
-          **Distribution:** TestFlight — External testers + internal
+          **Distribution:** TestFlight — Internal + External testers (100-1000 users)
+          **Purpose:** External beta testing, real device testing, large libraries, feedback collection, crash reporting
+          
+          ### Official Sequence Context
+          \`\`\`
+          Dev (1/5) → Alpha (2/5) → Beta (3/5) → RC (4/5) → Stable (5/5)
+                                  ↑ YOU ARE HERE — Beta — External Testing
+          \`\`\`
           
           ### What's in Beta?
-          - Feature complete 1.0.0 — All milestones done
-          - Performance budgets all met
+          - Feature complete 1.0.0 — All milestones done, all 5 pillars production
+          - Performance budgets all met strictly
           - TestFlight distribution ready
-          - Feedback collection active
-          - Crash reporting enabled
+          - Feedback collection active, crash reporting enabled
+          - Accessibility, haptics, animations polished
           
-          ### Beta Testing Focus
-          - [ ] Real device testing iPhone 12-15, iOS 17+
-          - [ ] Library scanning with large collections (10k+ tracks)
-          - [ ] Background playback stability
-          - [ ] Artwork cache 500MB LRU eviction
+          ### Beta Entry Criteria — Must Have Passed Alpha Exit
+          - Alpha exit criteria all passed
+          - All 5 pillars testable and stable
+          - Cold <1.5s, Warm <0.6s, Search <50ms, Library <200ms all met
+          - No critical bugs
+          
+          ### Beta Exit Criteria — Must Pass Before RC
+          - [ ] Real device testing iPhone 12-15, iOS 17+ — 5+ devices
+          - [ ] Library scanning 10k+ tracks works
+          - [ ] Background playback 1 hour stable
+          - [ ] Artwork cache 500MB LRU eviction works
+          - [ ] Download resume after network loss works
+          - [ ] Lyrics sync accuracy verified
+          - [ ] Taste DNA recommendations quality acceptable
+          - [ ] No crash in 1 hour continuous use — 10+ testers
+          - [ ] Crash-free rate >99% in TestFlight
+          - [ ] Feedback — No critical issues, minor issues triaged
+          - [ ] Performance budgets all met on real devices
+          
+          ### Beta Testing Focus Areas
+          - [ ] Real device iPhone 12-15, iOS 17+
+          - [ ] Library 10k+ tracks scanning and open
+          - [ ] Background playback stability 1h
+          - [ ] Artwork cache 500MB LRU
           - [ ] Download resume after network loss
           - [ ] Lyrics sync accuracy
-          - [ ] Taste DNA recommendations quality
+          - [ ] Taste DNA quality
           - [ ] Accessibility VoiceOver + Dynamic Type
-          - [ ] Haptics on all interactions
+          - [ ] Haptics all interactions
           - [ ] Dark mode Midnight Aurora theme
+          - [ ] Memory usage — no leaks in 1h
+          - [ ] Battery usage — reasonable
           
-          ### Beta Feedback
-          Please report:
+          ### Beta Feedback to Collect
           - Crashes with steps to reproduce
           - Performance issues (launch, search, library open)
-          - UI glitches
+          - UI glitches, layout issues
           - Audio playback issues
+          - Feature requests (for next minor, not this release)
           
-          ### Next: RC
-          After beta feedback fixes → \`v1.0.0-rc.1\` Release Candidate
+          ### Next in Official Sequence: RC
+          After beta feedback fixes → \`v1.0.0-rc.1\` — Release Candidate — Code freeze
+          
+          **Command for next:**
+          \`\`\`bash
+          git tag -a v1.0.0-rc.1 -m "QELORYX v1.0.0-rc.1 — RC — Release Candidate — Code freeze — All gates passed"
+          git push origin v1.0.0-rc.1
+          \`\`\`
           
           BETA
           elif [ "$CHANNEL" = "rc" ]; then
           cat >> release_notes.md << RC
-          ## 🎯 RC Build — Release Candidate — $VERSION
+          ## 🎯 RC — Release Candidate — Final Verification — $VERSION — 4/5
           
-          **Channel:** RC — Final verification before App Store
-          **Stability:** RC — Stable, no new features, only critical bug fixes
-          **Distribution:** TestFlight — Final external verification
+          **Official Sequence Position:** 4/5 — RC — Fourth stage — Final before stable
+          **Stability:** RC — Stable, code freeze, only critical fixes allowed
+          **Distribution:** TestFlight — Final verification, internal + external final testers
+          **Purpose:** Final verification before App Store, App Store Connect validation, no new features
+          
+          ### Official Sequence Context
+          \`\`\`
+          Dev (1/5) → Alpha (2/5) → Beta (3/5) → RC (4/5) → Stable (5/5)
+                                               ↑ YOU ARE HERE — RC — Final Verification
+          \`\`\`
           
           ### What's in RC?
-          - Code freeze — No new features, only critical fixes
-          - All performance budgets met ✅
+          - Code freeze — No new features, only critical bug fixes allowed
+          - All performance budgets met ✅ — strict
           - All quality gates passed ✅
           - App Store Ready verification done
-          - Final TestFlight testing
+          - Final TestFlight testing, App Store Connect validation
           
-          ### RC Verification Checklist — Must Pass All
+          ### RC Entry Criteria — Must Have Passed Beta Exit
+          - Beta exit criteria all passed
+          - Crash-free rate >99%
+          - No critical bugs
+          - Feedback triaged, critical fixes done
+          
+          ### RC Rules — Strict — Must Follow
+          - ❌ No new features — absolute
+          - ✅ Only critical bug fixes — crash, data loss, performance budget fail, App Store rejection risk
+          - ✅ Only performance fixes if budget fails — with proof
+          - ✅ Docs updates allowed — README, CHANGELOG, etc
+          - ❌ No refactoring, no new UI, no non-critical fixes
+          - ❌ No dependency updates unless critical security fix
+          
+          ### RC Exit Criteria — Must Pass All — No Exception — Before Stable
           - [ ] Build passes 107 Swift files production ✅
           - [ ] Tests pass CoreTests + DesignSystemTests ✅
           - [ ] Cold Launch <1.5s ✅
@@ -241,29 +407,47 @@ jobs:
           - [ ] Animations <16ms 60fps ✅
           - [ ] Haptics <10ms ✅
           - [ ] Navigation <50ms ✅
-          - [ ] No crashes in 1 hour continuous use
+          - [ ] No crashes in 1 hour continuous use — 5+ devices
           - [ ] Background playback 1 hour stable
-          - [ ] No memory leaks
+          - [ ] No memory leaks — Instruments check
           - [ ] Accessibility VoiceOver pass
-          - [ ] App Store Connect validation pass
+          - [ ] App Store Connect validation pass — no warnings/errors
+          - [ ] TestFlight final build tested on 5+ devices iPhone 12-15 iOS 17+
+          - [ ] Screenshots, description, keywords ready for App Store
           
-          ### RC Rules
-          - ❌ No new features
-          - ✅ Only critical bug fixes
-          - ✅ Only performance fixes if budget fails
-          - ✅ Documentation updates allowed
+          ### RC Verification Checklist
+          - [ ] Instruments — No leaks, reasonable memory
+          - [ ] TestFlight — 5+ devices, 1h each, no crash
+          - [ ] App Store Connect — Validation pass
+          - [ ] No new features since beta — code freeze verified via git diff
+          - [ ] Only critical fixes if any — minimal diff
           
-          ### Next: Stable
-          After RC verification → \`v1.0.0\` Stable App Store Release
+          ### Next in Official Sequence: Stable
+          After RC verification all pass → \`v1.0.0\` Stable — App Store GA
+          
+          **Command for next:**
+          \`\`\`bash
+          git tag -a v1.0.0 -m "QELORYX v1.0.0 — Stable — App Store Ready — Hear Beyond. Build Beyond. — All milestones — All budgets — All gates — Midnight Aurora"
+          git push origin v1.0.0
+          \`\`\`
           
           RC
           else
           cat >> release_notes.md << STABLE
-          ## 🎉 Stable Build — App Store Ready — $VERSION
+          ## 🎉 Stable — GA — App Store Ready — $VERSION — 5/5 — FINAL
           
-          **Channel:** Stable — Production App Store release
-          **Stability:** Stable — Production ready, all verifications passed
-          **Distribution:** App Store — Public
+          **Official Sequence Position:** 5/5 — Stable — Final stage — General Availability
+          **Stability:** Stable — Production ready, all verifications passed, GA
+          **Distribution:** App Store — Public — Production
+          **Purpose:** Production App Store release, public distribution, GA
+          
+          ### Official Sequence Context — Complete
+          \`\`\`
+          Dev (1/5) → Alpha (2/5) → Beta (3/5) → RC (4/5) → Stable (5/5)
+                                                            ↑ YOU ARE HERE — Stable — GA — DONE!
+          \`\`\`
+          
+          **Official Sequence Completed ✅ — Dev → Alpha → Beta → RC → Stable — All stages passed**
           
           ### 1.0.0 Stable — All Milestones Completed ✅
           
@@ -292,11 +476,62 @@ jobs:
           #### 1.0.0 — Stable ✅ — App Store Ready
           - Search production <50ms universal, Time Capsule production Today Last Year/Monthly Story/Heatmap, RootView production 5 tabs Library/Search/Discovery/Home/Downloads + Player sheet + Mini Player, Final verification
           
+          ### Stable Entry Criteria — Must Have Passed RC Exit — All Must Pass
+          - RC exit criteria all passed — 20+ items
+          - App Store Connect validation pass no warnings
+          - Screenshots, description, keywords, privacy policy, support URL ready
+          - App Icon, launch screen ready
+          - No critical bugs, crash-free >99.5%
+          
+          ### What's in Stable?
+          - Production ready 1.0.0 — All milestones, all 5 pillars
+          - All performance budgets met strictly
+          - All quality gates passed
+          - App Store submission ready
+          - Docs complete, tests all pass
+          
+          ### After Stable — Next Cycle
+          Start next minor/major cycle:
+          - \`v1.1.0-dev.1\` — Next minor features
+          - \`v1.0.1-dev.1\` — Patch fixes if needed
+          - \`v2.0.0-dev.1\` — Next major breaking
+          
+          **Command for next cycle:**
+          \`\`\`bash
+          git checkout -b arena/1.1.0-dev
+          # Update project.yml MARKETING_VERSION to 1.1.0
+          git tag -a v1.1.0-dev.1 -m "QELORYX v1.1.0-dev.1 — Dev — Next cycle — New features"
+          git push origin v1.1.0-dev.1
+          \`\`\`
+          
           STABLE
           fi
           
-          # Common footer for all channels
+          # Common footer — Official Sequence
           cat >> release_notes.md << FOOTER
+          
+          ---
+          
+          ## Official Release Sequence — Industry Standard — Implemented ✅
+          
+          | Order | Channel | Tag Example | Stability | Distribution | Purpose | Prerelease |
+          |-------|---------|-------------|-----------|--------------|---------|------------|
+          | 1/5 | Dev | v1.0.0-dev.1 | Experimental | Internal core team | Nightly, fast iteration, catch crashes early | true |
+          | 2/5 | Alpha | v1.0.0-alpha.1 | Alpha | Internal + QA | Features testable, internal QA, stability check | true |
+          | 3/5 | Beta | v1.0.0-beta.1 | Beta | TestFlight internal+external | Feature complete, external feedback, real devices | true |
+          | 4/5 | RC | v1.0.0-rc.1 | RC | TestFlight final | Code freeze, only critical fixes, final verification | true |
+          | 5/5 | Stable | v1.0.0 | Stable | App Store public | Production GA, public | false |
+          
+          **Sequence:** Dev → Alpha → Beta → RC → Stable — Strict order, no skipping, each stage exit criteria must pass before next
+          
+          **Versioning:** SemVer \`MAJOR.MINOR.PATCH-CHANNEL.NUMBER\` — e.g., 1.0.0-dev.1, 1.0.0-alpha.1, 1.0.0-beta.1, 1.0.0-rc.1, 1.0.0
+          
+          **Rules:**
+          - Dev → Alpha: No crash on 5 tabs, basic playback works
+          - Alpha → Beta: All 5 pillars testable, budgets met Cold <1.5s Search <50ms etc, no critical bugs, 30 min stable
+          - Beta → RC: Real device 5+ devices 10k tracks 1h background stable crash-free >99% feedback triaged
+          - RC → Stable: All 20+ RC checklist must pass all, App Store validation pass, screenshots ready, code freeze no new features
+          - Stable → Next Dev: Start next cycle v1.1.0-dev.1 or v1.0.1-dev.1
           
           ---
           
@@ -344,7 +579,7 @@ jobs:
           - README — 1.0.0 Stable
           - CHANGELOG — 1.0.0 Stable
           - BUILD_READINESS — 1.0.0 Stable
-          - RELEASE_FLOW — Dev→Beta→RC→Stable
+          - RELEASE_FLOW — Official Sequence Dev→Alpha→Beta→RC→Stable
           
           ---
           
@@ -366,12 +601,12 @@ jobs:
           
           ---
           
-          *QELORYX $VERSION ($CHANNEL) — Hear Beyond. Build Beyond. — Built with Midnight Aurora 🌌 — Qeloryx Labs*
+          *QELORYX $VERSION ($CHANNEL $ORDER) — Hear Beyond. Build Beyond. — Official Release Sequence — Built with Midnight Aurora 🌌 — Qeloryx Labs*
           FOOTER
           
           cat release_notes.md
       
-      - name: Create Release — ${{ needs.detect-channel.outputs.channel }}
+      - name: Create Release — ${{ needs.detect-channel.outputs.order }}
         uses: softprops/action-gh-release@v1
         with:
           name: ${{ needs.detect-channel.outputs.name }}
@@ -383,11 +618,12 @@ jobs:
             README.md
             CHANGELOG.md
             Docs/BUILD_READINESS.md
+            Docs/RELEASE_FLOW.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-for-release:
-    name: Build for Release — ${{ needs.detect-channel.outputs.channel }} — ${{ needs.detect-channel.outputs.version }}
+    name: Build — ${{ needs.detect-channel.outputs.order }} — ${{ needs.detect-channel.outputs.version }}
     needs: detect-channel
     runs-on: macos-14
     steps:
@@ -419,7 +655,8 @@ jobs:
       
       - name: Build Release — ${{ needs.detect-channel.outputs.channel }}
         run: |
-          echo "Building QELORYX ${{ needs.detect-channel.outputs.version }} channel ${{ needs.detect-channel.outputs.channel }}"
+          echo "Building QELORYX ${{ needs.detect-channel.outputs.version }} channel ${{ needs.detect-channel.outputs.channel }} order ${{ needs.detect-channel.outputs.order }}"
+          echo "Official Sequence: Dev(1) → Alpha(2) → Beta(3) → RC(4) → Stable(5)"
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx -destination 'generic/platform=iOS' -configuration Release build CODE_SIGNING_ALLOWED=NO
       
       - name: Run Tests — ${{ needs.detect-channel.outputs.channel }}
@@ -429,29 +666,35 @@ jobs:
           echo "Tests for ${{ needs.detect-channel.outputs.channel }} ${{ needs.detect-channel.outputs.version }} — Completed"
 
   notify-channel:
-    name: Notify Channel — ${{ needs.detect-channel.outputs.channel }}
+    name: Notify — ${{ needs.detect-channel.outputs.order }}
     needs: [detect-channel, create-release, build-for-release]
     runs-on: ubuntu-latest
     steps:
-      - name: Notify — ${{ needs.detect-channel.outputs.channel }} Released
+      - name: Notify Official Sequence
         run: |
           VERSION="${{ needs.detect-channel.outputs.version }}"
           CHANNEL="${{ needs.detect-channel.outputs.channel }}"
+          ORDER="${{ needs.detect-channel.outputs.order }}"
           
-          echo "=== QELORYX $VERSION $CHANNEL Released ==="
+          echo "=== QELORYX $VERSION $CHANNEL $ORDER Released ==="
+          echo "Official Sequence: Dev(1) → Alpha(2) → Beta(3) → RC(4) → Stable(5)"
           echo ""
           if [ "$CHANNEL" = "dev" ]; then
-            echo "🚧 Dev build $VERSION released — Internal testing"
-            echo "Next: Test dev build → if OK → tag v1.0.0-beta.1"
+            echo "🚧 Dev $VERSION $ORDER released — Internal nightly"
+            echo "Next: Test dev → if OK → tag v1.0.0-alpha.1 (2/5 Alpha)"
+          elif [ "$CHANNEL" = "alpha" ]; then
+            echo "🔬 Alpha $VERSION $ORDER released — Internal QA"
+            echo "Next: Alpha QA → if OK → tag v1.0.0-beta.1 (3/5 Beta)"
           elif [ "$CHANNEL" = "beta" ]; then
-            echo "🧪 Beta build $VERSION released — TestFlight"
-            echo "Next: Beta testing → feedback fixes → tag v1.0.0-rc.1"
+            echo "🧪 Beta $VERSION $ORDER released — TestFlight"
+            echo "Next: Beta testing → feedback fixes → tag v1.0.0-rc.1 (4/5 RC)"
           elif [ "$CHANNEL" = "rc" ]; then
-            echo "🎯 RC build $VERSION released — Final verification"
-            echo "Next: RC verification → if all pass → tag v1.0.0 Stable"
+            echo "🎯 RC $VERSION $ORDER released — Final verification"
+            echo "Next: RC verification all pass → tag v1.0.0 (5/5 Stable)"
           else
-            echo "🎉 Stable build $VERSION released — App Store!"
-            echo "Next: Start next cycle v1.1.0-dev.1"
+            echo "🎉 Stable $VERSION $ORDER released — App Store GA!"
+            echo "Official Sequence Completed ✅ Dev→Alpha→Beta→RC→Stable"
+            echo "Next: Start next cycle v1.1.0-dev.1 (1/5 Dev)"
           fi
           echo ""
-          echo "QELORYX $VERSION $CHANNEL — Hear Beyond. Build Beyond. 🌌"
+          echo "QELORYX $VERSION $CHANNEL $ORDER — Hear Beyond. Build Beyond. 🌌"
