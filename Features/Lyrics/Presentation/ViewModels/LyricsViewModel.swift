@@ -78,7 +78,16 @@ public final class LyricsViewModel: ObservableObject {
         }
         
         // Playback state -> sync
-        let sub2 = eventBus.subscribe(to: QeloryxEvent.playbackStateChanged(state: .stopped).name) { [weak self] _ in
+        let stoppedState = PlaybackStateSnapshot(
+            trackID: nil,
+            isPlaying: false,
+            position: 0,
+            duration: 0,
+            queueVersion: 0,
+            shuffleEnabled: false,
+            repeatMode: .off
+        )
+        let sub2 = eventBus.subscribe(to: QeloryxEvent.playbackStateChanged(state: stoppedState).name) { [weak self] _ in
             Task { @MainActor in
                 self?.updateCurrentPosition()
             }

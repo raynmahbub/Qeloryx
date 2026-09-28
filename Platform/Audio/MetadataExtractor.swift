@@ -48,7 +48,7 @@ public final class AstryxMetadataExtractor: @unchecked Sendable {
             }
             
             // Artwork
-            if item.commonKey == .artwork {
+            if item.commonKey == AVMetadataKey.commonKeyArtwork {
                 if let data = try? await item.load(.dataValue) {
                     artworkData = data
                 }
