@@ -54,11 +54,58 @@ jobs:
         run: |
           set -o pipefail
           swift test -c release --filter DiscoveryTests 2>&1 | tee test-DiscoveryTests.log
-      - name: Test DownloadsTests
-        timeout-minutes: 6
+      # DownloadsTests wedged at the class level; fan its methods out so the
+      # exact hanging test shows up as the failed step.
+      - name: Test DownloadsTests.testCancel
+        timeout-minutes: 3
         run: |
           set -o pipefail
-          swift test -c release --filter DownloadsTests 2>&1 | tee test-DownloadsTests.log
+          swift test -c release --filter "DownloadsTests/testCancel" 2>&1 | tee test-DownloadsTests-testCancel.log
+      - name: Test DownloadsTests.testConcurrentLimit
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testConcurrentLimit" 2>&1 | tee test-DownloadsTests-testConcurrentLimit.log
+      - name: Test DownloadsTests.testDownloadErrorRetryable
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testDownloadErrorRetryable" 2>&1 | tee test-DownloadsTests-testDownloadErrorRetryable.log
+      - name: Test DownloadsTests.testEnqueueAndAllTasks
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testEnqueueAndAllTasks" 2>&1 | tee test-DownloadsTests-testEnqueueAndAllTasks.log
+      - name: Test DownloadsTests.testFormattedProgressAndBytes
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testFormattedProgressAndBytes" 2>&1 | tee test-DownloadsTests-testFormattedProgressAndBytes.log
+      - name: Test DownloadsTests.testPauseAndResume
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testPauseAndResume" 2>&1 | tee test-DownloadsTests-testPauseAndResume.log
+      - name: Test DownloadsTests.testPriorityOrdering
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testPriorityOrdering" 2>&1 | tee test-DownloadsTests-testPriorityOrdering.log
+      - name: Test DownloadsTests.testRetryWithBackoff
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testRetryWithBackoff" 2>&1 | tee test-DownloadsTests-testRetryWithBackoff.log
+      - name: Test DownloadsTests.testStateMachineTransitions
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testStateMachineTransitions" 2>&1 | tee test-DownloadsTests-testStateMachineTransitions.log
+      - name: Test DownloadsTests.testStats
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testStats" 2>&1 | tee test-DownloadsTests-testStats.log
       - name: Test EventBusTests
         timeout-minutes: 6
         run: |
