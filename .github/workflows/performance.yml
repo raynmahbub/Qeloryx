@@ -28,9 +28,32 @@ jobs:
         with:
           xcode-version: '16.4'
       - name: Run package tests
-        run: swift test --enable-code-coverage
+        run: swift test --enable-code-coverage 2>&1 | tee performance-test.log
+      - name: Surface test failures in annotations
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          lines = Path("performance-test.log").read_text(errors="replace").splitlines()
+          matches = [line for line in lines if re.search(r"error:|failed|XCTAssert", line, re.IGNORECASE)]
+          for line in matches[:15]:
+              escaped = line.replace("%", "%25").replace("\\r", "%0D").replace("\\n", "%0A")
+              print(f"::error title=Performance test failure::{escaped}")
+          if not matches:
+              print("::error title=Performance test failed::Inspect the performance-test.log artifact for details.")
+          PY
       - name: Confirm instrumentation is present
         run: |
           set -euo pipefail
           test -f Core/Shared/Performance/PerformanceMonitor.swift
           test -f Platform/System/LaunchOptimizer.swift
+      - name: Upload performance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: performance-diagnostics-${{ github.sha }}
+          path: performance-test.log
+          if-no-files-found: ignore
+          retention-days: 5

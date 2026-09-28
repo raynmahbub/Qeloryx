@@ -73,7 +73,7 @@ jobs:
           set -o pipefail
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
             -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
+            -configuration Debug -quiet CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
       - name: Surface compiler errors in check annotations
         if: failure()
         run: |
@@ -82,7 +82,7 @@ jobs:
           import re
 
           lines = Path("xcodebuild.log").read_text(errors="replace").splitlines()
-          matches = [line for line in lines if re.search(r"\berror:|BUILD FAILED|SwiftCompile", line)]
+          matches = [line for line in lines if re.search(r"\berror:", line)]
           for line in matches[:20]:
               escaped = line.replace("%", "%25").replace("\\r", "%0D").replace("\\n", "%0A")
               print(f"::error title=Xcode build diagnostic::{escaped}")
