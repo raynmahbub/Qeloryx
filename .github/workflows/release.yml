@@ -31,11 +31,69 @@ jobs:
         run: |
           set -o pipefail
           swift build -c release 2>&1 | tee swift-build-release.log
-      - name: Test Swift package
-        timeout-minutes: 25
+      # Fan out XCTest classes into individual steps so a wedged class is
+      # visible directly in the step list (piped XCTest output is
+      # block-buffered and never reaches the log on a hard kill).
+      - name: Test AstryxAudioEngineTests
+        timeout-minutes: 6
         run: |
           set -o pipefail
-          swift test -c release -v 2>&1 | tee swift-test-release.log
+          swift test -c release --filter AstryxAudioEngineTests 2>&1 | tee test-AstryxAudioEngineTests.log
+      - name: Test AstryxColorsTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter AstryxColorsTests 2>&1 | tee test-AstryxColorsTests.log
+      - name: Test CapabilityRegistryTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter CapabilityRegistryTests 2>&1 | tee test-CapabilityRegistryTests.log
+      - name: Test DiscoveryTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter DiscoveryTests 2>&1 | tee test-DiscoveryTests.log
+      - name: Test DownloadsTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests 2>&1 | tee test-DownloadsTests.log
+      - name: Test EventBusTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter EventBusTests 2>&1 | tee test-EventBusTests.log
+      - name: Test LibraryDNATests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LibraryDNATests 2>&1 | tee test-LibraryDNATests.log
+      - name: Test LibraryEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LibraryEngineTests 2>&1 | tee test-LibraryEngineTests.log
+      - name: Test LyricsPlusTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LyricsPlusTests 2>&1 | tee test-LyricsPlusTests.log
+      - name: Test PlayerTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter PlayerTests 2>&1 | tee test-PlayerTests.log
+      - name: Test PolishTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter PolishTests 2>&1 | tee test-PolishTests.log
+      - name: Test SearchEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter SearchEngineTests 2>&1 | tee test-SearchEngineTests.log
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
