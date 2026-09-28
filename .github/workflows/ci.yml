@@ -27,9 +27,19 @@ jobs:
       - name: Show toolchain
         run: swift --version
       - name: Build
-        run: swift build -v
+        run: swift build -v 2>&1 | tee swift-build.log
       - name: Test
-        run: swift test --enable-code-coverage
+        run: swift test --enable-code-coverage 2>&1 | tee swift-test.log
+      - name: Upload Swift diagnostics
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: swift-diagnostics-${{ github.sha }}
+          path: |
+            swift-build.log
+            swift-test.log
+          if-no-files-found: ignore
+          retention-days: 5
 
   lint:
     name: SwiftLint
@@ -39,7 +49,15 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Lint
-        run: swiftlint lint
+        run: swiftlint lint 2>&1 | tee swiftlint.log
+      - name: Upload SwiftLint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: swiftlint-diagnostics-${{ github.sha }}
+          path: swiftlint.log
+          if-no-files-found: ignore
+          retention-days: 5
 
   ios-build:
     name: iOS simulator build
@@ -51,10 +69,19 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Build unsigned simulator app
-        run: >-
-          xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx
-          -destination 'generic/platform=iOS Simulator'
-          -configuration Debug CODE_SIGNING_ALLOWED=NO build
+        run: |
+          set -o pipefail
+          xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
+      - name: Upload Xcode diagnostics
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: xcode-diagnostics-${{ github.sha }}
+          path: xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 5
 
   docs:
     name: Documentation sanity
