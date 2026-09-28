@@ -23,7 +23,7 @@ public struct RootView: View {
     public var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $coordinator.selectedTab) {
-                LibraryTab()
+                LibraryRootTab()
                     .tabItem { Label(AppTab.library.rawValue, systemImage: AppTab.library.icon) }
                     .tag(AppTab.library)
                 
@@ -161,7 +161,7 @@ private struct EnhancedMiniPlayer: View {
 
 // MARK: - Tabs — Production with real views
 
-private struct LibraryTab: View {
+private struct LibraryRootTab: View {
     var body: some View {
         NavigationStack {
             LibraryView()
