@@ -28,9 +28,13 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
       - name: Build Swift package
-        run: swift build -c release
+        run: |
+          set -o pipefail
+          swift build -c release 2>&1 | tee swift-build-release.log
       - name: Test Swift package
-        run: swift test -c release
+        run: |
+          set -o pipefail
+          swift test -c release 2>&1 | tee swift-test-release.log
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -41,7 +45,7 @@ jobs:
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Release -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild-simulator.log
       - name: Package app
         run: |
           set -euo pipefail
@@ -60,7 +64,7 @@ jobs:
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
             -destination 'generic/platform=iOS' \
             -configuration Release -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild-device.log
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
@@ -77,6 +81,36 @@ jobs:
           path: Qeloryx.ipa
           if-no-files-found: error
           retention-days: 1
+      - name: Surface build errors in check annotations
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          matches = []
+          seen = set()
+          for log in Path(".").glob("*.log"):
+              for line in log.read_text(errors="replace").splitlines():
+                  if re.search(r"\berror:", line, re.IGNORECASE):
+                      entry = f"{log.name}: {line.strip()}"
+                      if entry not in seen:
+                          seen.add(entry)
+                          matches.append(entry)
+          for line in matches[:40]:
+              escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Release build diagnostic::{escaped}")
+          if not matches:
+              print("::error title=Release build failed::No error line was captured; inspect the uploaded release diagnostics artifact.")
+          PY
+      - name: Upload release diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-diagnostics-${{ github.sha }}
+          path: "*.log"
+          if-no-files-found: ignore
+          retention-days: 5
 
   publish:
     name: Publish GitHub prerelease/release
