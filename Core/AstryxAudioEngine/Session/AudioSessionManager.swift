@@ -1,5 +1,6 @@
 // QELORYX — AstryxAudioEngine
 // AudioSessionManager.swift
+// Protocol only — implementation in Platform layer per clean architecture
 
 import Foundation
 
@@ -20,39 +21,18 @@ public protocol AudioSessionManagerProtocol: Sendable {
     func handleInterruption(_ interruption: AudioSessionInterruption)
 }
 
-// MARK: - AstryxAudioSessionManager (Foundation - platform abstraction)
+// MARK: - Fallback for Core-only builds
 
-public final class AstryxAudioSessionManager: AudioSessionManagerProtocol {
-    
+public final class FallbackAudioSessionManager: AudioSessionManagerProtocol, @unchecked Sendable {
     private let eventBus: any EventBusProtocol
-    private var isActive = false
     
     public init(eventBus: any EventBusProtocol = AstryxEventBus.shared) {
         self.eventBus = eventBus
     }
     
-    public func configure(category: AudioSessionCategory) throws {
-        // Real implementation in Platform layer uses AVAudioSession
-        // Foundation placeholder logs
-        #if DEBUG
-        debugPrint("[AudioSessionManager] Configure category: \(category.rawValue)")
-        #endif
-    }
-    
-    public func activate() throws {
-        isActive = true
-        #if DEBUG
-        debugPrint("[AudioSessionManager] Activated")
-        #endif
-    }
-    
-    public func deactivate() throws {
-        isActive = false
-        #if DEBUG
-        debugPrint("[AudioSessionManager] Deactivated")
-        #endif
-    }
-    
+    public func configure(category: AudioSessionCategory) throws {}
+    public func activate() throws {}
+    public func deactivate() throws {}
     public func handleInterruption(_ interruption: AudioSessionInterruption) {
         switch interruption {
         case .began:
