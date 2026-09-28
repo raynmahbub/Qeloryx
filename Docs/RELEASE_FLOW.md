@@ -9,7 +9,8 @@ The first planned development tag is `v0.0.1-dev.1`. A tag push starts a release
 1. Validates the tag against the supported semantic-version format.
 2. Builds and tests the Swift package in Release configuration.
 3. Generates the Xcode project and builds an unsigned iOS Simulator app.
-4. Attaches `Qeloryx-simulator.zip` to a GitHub Release. Tags containing a prerelease suffix (for example `-dev.1`) create a prerelease.
+4. Builds an unsigned arm64 device app and packages it as `Qeloryx.ipa` (standard `Payload/Qeloryx.app` layout) for sideloading.
+5. Attaches both `Qeloryx.ipa` and `Qeloryx-simulator.zip` to a GitHub Release. Tags containing a prerelease suffix (for example `-dev.1`) create a prerelease.
 
 The release job runs only after all validation steps succeed. Published tags are immutable: use a new increment (`dev.2`, for example) for subsequent builds rather than moving an existing tag.
 
@@ -23,7 +24,12 @@ Monitor the **Actions** tab and then the repository **Releases** page. The GitHu
 
 ## Artifact and distribution limits
 
-The attached archive contains an unsigned **iOS Simulator** `.app`, packaged as a ZIP for development/evaluation. It is not an IPA, cannot be installed on a physical iPhone, and is not an App Store/TestFlight distribution. Device distribution requires Apple Developer membership, provisioning/signing, and a separately secured distribution workflow. Signing certificates, private keys, and App Store Connect credentials must be stored as protected GitHub secrets or managed signing assets, never committed to source control.
+Every release ships two assets:
+
+- **`Qeloryx.ipa`** — an unsigned arm64 **device** build packaged in the standard IPA layout (`Payload/Qeloryx.app`). It can be installed on a physical iPhone/iPad by signing it locally with a sideloading tool such as AltStore, SideStore, Esign, Feather, or TrollStore. Being unsigned, it cannot be installed directly out of the box, and it is not an App Store/TestFlight distribution.
+- **`Qeloryx-simulator.zip`** — an unsigned **iOS Simulator** `.app` for development/evaluation. It cannot be installed on a physical iPhone.
+
+Signed distribution (personal "Install via Xcode", TestFlight, or the App Store) requires Apple Developer membership, provisioning/signing, and a separately secured distribution workflow. Signing certificates, private keys, and App Store Connect credentials must be stored as protected GitHub secrets or managed signing assets, never committed to source control.
 
 ## Release conventions
 

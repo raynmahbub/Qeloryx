@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate tagged source
+    name: Validate tag and build release assets
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -54,6 +54,29 @@ jobs:
           path: Qeloryx-simulator.zip
           if-no-files-found: error
           retention-days: 1
+      - name: Build unsigned device app (arm64)
+        run: |
+          set -o pipefail
+          xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
+            -destination 'generic/platform=iOS' \
+            -configuration Release -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Qeloryx.app"
+          test -d "$APP"
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          ditto -c -k --sequesterRsrc Payload Qeloryx.ipa
+          rm -rf Payload
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-ipa
+          path: Qeloryx.ipa
+          if-no-files-found: error
+          retention-days: 1
 
   publish:
     name: Publish GitHub prerelease/release
@@ -63,6 +86,9 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: release-simulator-app
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-ipa
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,7 +100,7 @@ jobs:
           else
             PRERELEASE=()
           fi
-          gh release create "$RELEASE_TAG" Qeloryx-simulator.zip \
+          gh release create "$RELEASE_TAG" Qeloryx.ipa Qeloryx-simulator.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "Qeloryx ${RELEASE_TAG#v}" \
             --generate-notes \

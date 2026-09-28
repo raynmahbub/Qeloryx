@@ -5,6 +5,11 @@ All notable changes to QELORYX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added — Release automation
+- **Direct IPA release** — `release.yml` now also builds an unsigned arm64 device app (`generic/platform=iOS`, Release, `CODE_SIGNING_ALLOWED=NO`) and packages it as `Qeloryx.ipa` (standard `Payload/Qeloryx.app` layout). Tag pushes (`v*`) publish a GitHub Release/prerelease with both `Qeloryx.ipa` (sideloadable via AltStore/SideStore/Esign/TrollStore after local signing) and the existing `Qeloryx-simulator.zip`. Docs (`Docs/RELEASE_FLOW.md`, `README.md`) and `Scripts/release.sh` output updated to match.
+
 ## [1.0.0] — 2026-09-28 — Stable — App Store Ready ✅
 
 ### Added — All Milestones Production

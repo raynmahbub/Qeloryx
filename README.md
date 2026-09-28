@@ -62,7 +62,7 @@ Scripts/             Local developer and release utilities
 
 Pull requests and branch pushes are checked by GitHub Actions. The checks cover Swift package build/tests, lint, generated iOS project build, and documentation/repository sanity. A failed required check is a signal to fix the underlying issue; workflows must not silently turn build or test failures into success.
 
-Development releases use annotated semantic-version tags, for example `v0.0.1-dev.1`. Pushing a tag triggers validation and creates a GitHub **prerelease** with the build artifact and generated release notes. The artifact is an **unsigned simulator build** for evaluation; it is not an installable App Store IPA and cannot be distributed to physical devices without signing. See [`Docs/RELEASE_FLOW.md`](Docs/RELEASE_FLOW.md) and [`CHANGELOG.md`](CHANGELOG.md).
+Development releases use annotated semantic-version tags, for example `v0.0.1-dev.1`. Pushing a tag triggers validation and creates a GitHub **prerelease** with the build artifacts and generated release notes. Two assets are attached: `Qeloryx.ipa`, an **unsigned arm64 device build** that can be sideloaded with AltStore, SideStore, Esign, Feather, or TrollStore after local signing; and `Qeloryx-simulator.zip`, an **unsigned simulator build** for evaluation. Neither is an App Store-signed distribution; signed TestFlight/App Store delivery requires Apple Developer credentials managed outside source control. See [`Docs/RELEASE_FLOW.md`](Docs/RELEASE_FLOW.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 To start a development release, first ensure the desired commit is on the intended release branch and CI is green, then create and push a unique tag:
 
