@@ -8,7 +8,7 @@ import QeloryxCore
 
 import Foundation
 
-#if canImport(AVFoundation)
+#if canImport(AVFoundation) && canImport(UIKit)
 import AVFoundation
 
 public final class AstryxAudioSessionManager: AudioSessionManagerProtocol, @unchecked Sendable {

@@ -170,9 +170,13 @@ public final class AVFoundationAdapter: AudioPlayerAdapterProtocol, @unchecked S
 
 extension AVFoundationAdapter {
     public var isAirPlayActive: Bool {
+        #if canImport(UIKit)
         let session = AVAudioSession.sharedInstance()
         let outputs = session.currentRoute.outputs
         return outputs.contains { $0.portType == .airPlay }
+        #else
+        return false
+        #endif
     }
     public var allowsExternalPlayback: Bool {
         get { player?.allowsExternalPlayback ?? true }
