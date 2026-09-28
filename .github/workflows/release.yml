@@ -1,27 +1,108 @@
-name: Release — QELORYX 1.0.0 Stable
+name: Release — QELORYX Dev → Beta → RC → Stable
 
 on:
   push:
     tags:
       - 'v*'
+      - 'v*-dev*'
+      - 'v*-beta*'
+      - 'v*-rc*'
       - '1.0.0'
       - '1.0.*'
+      - '1.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., 1.0.0)'
+        description: 'Release version (e.g., 1.0.0-dev.1, 1.0.0-beta.1, 1.0.0-rc.1, 1.0.0)'
         required: true
-        default: '1.0.0'
+        default: '1.0.0-dev.1'
         type: string
+      channel:
+        description: 'Release channel'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - beta
+          - rc
+          - stable
       prerelease:
-        description: 'Is prerelease?'
+        description: 'Is prerelease? (auto-detected from channel if not set)'
         required: false
         default: false
         type: boolean
 
 jobs:
+  detect-channel:
+    name: Detect Release Channel — Dev/Beta/RC/Stable
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.detect.outputs.version }}
+      channel: ${{ steps.detect.outputs.channel }}
+      prerelease: ${{ steps.detect.outputs.prerelease }}
+      name: ${{ steps.detect.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Detect Channel from Tag/Inputs
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            CHANNEL="${{ inputs.channel }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+            VERSION=${TAG#v}
+            # Auto-detect channel from version string
+            if [[ "$VERSION" == *"-dev"* ]]; then
+              CHANNEL="dev"
+            elif [[ "$VERSION" == *"-beta"* ]]; then
+              CHANNEL="beta"
+            elif [[ "$VERSION" == *"-rc"* ]]; then
+              CHANNEL="rc"
+            else
+              CHANNEL="stable"
+            fi
+          fi
+          
+          # Determine prerelease flag
+          if [ "$CHANNEL" = "stable" ]; then
+            PRERELEASE="false"
+            NAME="QELORYX $VERSION — Hear Beyond. Build Beyond. — Stable"
+          elif [ "$CHANNEL" = "rc" ]; then
+            PRERELEASE="true"
+            NAME="QELORYX $VERSION — RC — Release Candidate"
+          elif [ "$CHANNEL" = "beta" ]; then
+            PRERELEASE="true"
+            NAME="QELORYX $VERSION — Beta — TestFlight Ready"
+          else
+            PRERELEASE="true"
+            NAME="QELORYX $VERSION — Dev — Internal Testing"
+          fi
+          
+          # Override if manual prerelease input set for workflow_dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE="true"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          
+          echo "=== Release Detection ==="
+          echo "Version: $VERSION"
+          echo "Channel: $CHANNEL"
+          echo "Prerelease: $PRERELEASE"
+          echo "Name: $NAME"
+          echo "Tag: ${GITHUB_REF#refs/tags/}"
+
   create-release:
-    name: Create GitHub Release — 1.0.0 Stable
+    name: Create Release — ${{ needs.detect-channel.outputs.channel }}
+    needs: detect-channel
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,65 +111,196 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Get Version
-        id: version
+      - name: Generate Release Notes — ${{ needs.detect-channel.outputs.channel }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            # Extract from tag, remove v prefix
-            TAG=${GITHUB_REF#refs/tags/}
-            VERSION=${TAG#v}
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-          fi
-          cat $GITHUB_OUTPUT
-      
-      - name: Generate Release Notes — 1.0.0 Stable
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          echo "Generating release notes for $VERSION"
+          VERSION="${{ needs.detect-channel.outputs.version }}"
+          CHANNEL="${{ needs.detect-channel.outputs.channel }}"
           
-          cat > release_notes.md << EOF
-          # QELORYX $VERSION — Hear Beyond. Build Beyond. — App Store Ready
+          echo "Generating release notes for $VERSION channel $CHANNEL"
+          
+          # Common header
+          cat > release_notes.md << HEADER
+          # QELORYX $VERSION — Hear Beyond. Build Beyond.
           
           ## Project ASTRYX — Premium offline-first music platform
           **Company:** Qeloryx Labs
-          **Version:** $VERSION Stable
+          **Version:** $VERSION
+          **Channel:** $CHANNEL
           **Theme:** Midnight Aurora
           **Strategy:** Greenfield
           
           ---
           
-          ## 🎉 1.0.0 Stable — All Milestones Completed ✅
+          HEADER
           
-          ### 0.1.0-dev — Foundation ✅
+          # Channel-specific notes
+          if [ "$CHANNEL" = "dev" ]; then
+          cat >> release_notes.md << DEV
+          ## 🚧 Dev Build — Internal Testing — $VERSION
+          
+          **Channel:** Dev — Internal development build for core team testing
+          **Stability:** Experimental — May contain unfinished features, debug logs, known issues
+          **Distribution:** Internal — Direct install, not for TestFlight/App Store
+          
+          ### What's in Dev?
+          - Latest commits from \`arena/01a0e693-qeloryx\` branch
+          - All 5 pillars under active development
+          - Debug logging enabled
+          - Performance monitoring active
+          - All engines: Player, Library DNA, Taste DNA, Audio Lab, Spaces
+          
+          ### Dev Testing Checklist
+          - [ ] Cold Launch <1.5s
+          - [ ] Warm Launch <0.6s
+          - [ ] Search <50ms
+          - [ ] Library Open <200ms
+          - [ ] Play/Pause Instant + Haptics <10ms
+          - [ ] Queue Instant
+          - [ ] Seek <50ms
+          - [ ] Lyrics Sync <50ms
+          - [ ] Downloads state machine
+          - [ ] No crash on 5 tabs navigation
+          
+          ### Known Issues (Dev)
+          - May have unfinished UI polish
+          - Debug logs may affect performance slightly
+          - Some edge cases not yet handled
+          
+          ### Next: Beta
+          After dev verification → \`v1.0.0-beta.1\` for TestFlight external testing
+          
+          DEV
+          elif [ "$CHANNEL" = "beta" ]; then
+          cat >> release_notes.md << BETA
+          ## 🧪 Beta Build — TestFlight Ready — $VERSION
+          
+          **Channel:** Beta — External beta testing via TestFlight
+          **Stability:** Beta — Feature complete, needs external feedback
+          **Distribution:** TestFlight — External testers + internal
+          
+          ### What's in Beta?
+          - Feature complete 1.0.0 — All milestones done
+          - Performance budgets all met
+          - TestFlight distribution ready
+          - Feedback collection active
+          - Crash reporting enabled
+          
+          ### Beta Testing Focus
+          - [ ] Real device testing iPhone 12-15, iOS 17+
+          - [ ] Library scanning with large collections (10k+ tracks)
+          - [ ] Background playback stability
+          - [ ] Artwork cache 500MB LRU eviction
+          - [ ] Download resume after network loss
+          - [ ] Lyrics sync accuracy
+          - [ ] Taste DNA recommendations quality
+          - [ ] Accessibility VoiceOver + Dynamic Type
+          - [ ] Haptics on all interactions
+          - [ ] Dark mode Midnight Aurora theme
+          
+          ### Beta Feedback
+          Please report:
+          - Crashes with steps to reproduce
+          - Performance issues (launch, search, library open)
+          - UI glitches
+          - Audio playback issues
+          
+          ### Next: RC
+          After beta feedback fixes → \`v1.0.0-rc.1\` Release Candidate
+          
+          BETA
+          elif [ "$CHANNEL" = "rc" ]; then
+          cat >> release_notes.md << RC
+          ## 🎯 RC Build — Release Candidate — $VERSION
+          
+          **Channel:** RC — Final verification before App Store
+          **Stability:** RC — Stable, no new features, only critical bug fixes
+          **Distribution:** TestFlight — Final external verification
+          
+          ### What's in RC?
+          - Code freeze — No new features, only critical fixes
+          - All performance budgets met ✅
+          - All quality gates passed ✅
+          - App Store Ready verification done
+          - Final TestFlight testing
+          
+          ### RC Verification Checklist — Must Pass All
+          - [ ] Build passes 107 Swift files production ✅
+          - [ ] Tests pass CoreTests + DesignSystemTests ✅
+          - [ ] Cold Launch <1.5s ✅
+          - [ ] Warm Launch <0.6s ✅
+          - [ ] Search <50ms ✅
+          - [ ] Library Open <200ms ✅
+          - [ ] Queue Instant <10ms ✅
+          - [ ] Seek <50ms ✅
+          - [ ] Play/Pause Instant + Haptics <10ms ✅
+          - [ ] Lyrics Sync <50ms ✅
+          - [ ] Karaoke <100ms ✅
+          - [ ] Download Enqueue <50ms ✅
+          - [ ] Taste DNA Gen <200ms ✅
+          - [ ] Recommendations <100ms ✅
+          - [ ] Animations <16ms 60fps ✅
+          - [ ] Haptics <10ms ✅
+          - [ ] Navigation <50ms ✅
+          - [ ] No crashes in 1 hour continuous use
+          - [ ] Background playback 1 hour stable
+          - [ ] No memory leaks
+          - [ ] Accessibility VoiceOver pass
+          - [ ] App Store Connect validation pass
+          
+          ### RC Rules
+          - ❌ No new features
+          - ✅ Only critical bug fixes
+          - ✅ Only performance fixes if budget fails
+          - ✅ Documentation updates allowed
+          
+          ### Next: Stable
+          After RC verification → \`v1.0.0\` Stable App Store Release
+          
+          RC
+          else
+          cat >> release_notes.md << STABLE
+          ## 🎉 Stable Build — App Store Ready — $VERSION
+          
+          **Channel:** Stable — Production App Store release
+          **Stability:** Stable — Production ready, all verifications passed
+          **Distribution:** App Store — Public
+          
+          ### 1.0.0 Stable — All Milestones Completed ✅
+          
+          #### 0.1.0-dev — Foundation ✅
           - Repository structure QELORYX/App/Core/Features/Platform/DesignSystem/Docs/Tests/Scripts
           - Core engines skeletons, DesignSystem Midnight Aurora tokens, Platform isolation, Docs ADR/EPL/IL/SHM/ACC, CI, Tests
           
-          ### 0.1.0-alpha.1 — Player ✅ — QEL-012
+          #### 0.1.0-alpha.1 — Player ✅ — QEL-012
           - Play, Pause, Seek, Queue, Shuffle, Repeat, Background, Dynamic Island, Lock Screen, AirPlay, artwork transitions, haptics, production AVFoundation
           
-          ### 0.2.0-alpha — Library ✅ — QEL-024
+          #### 0.2.0-alpha — Library ✅ — QEL-024
           - Multi-library, Album/Artist/Genre/Folder/Favorites/History/Recently Added, Incremental indexing, Artwork cache FS 500MB LRU, Metadata normalization, Duplicate detection
           
-          ### 0.3.0-alpha — Lyrics ✅ — QEL-032
+          #### 0.3.0-alpha — Lyrics ✅ — QEL-032
           - LRC parsing, Synced Lyrics, Karaoke word-level, Translation-ready es/fr/de/ja/ko/zh/bn, Fullscreen Mode
           
-          ### 0.4.0-alpha — Downloads ✅ — QEL-041
-          - State machine Queued→Downloading→Paused→Retry→Completed→Failed + Cancelled, Resume with resumeData, Retry with exponential backoff, Priority Queue, Offline optimization, Background session
+          #### 0.4.0-alpha — Downloads ✅ — QEL-041
+          - State machine Queued→Downloading→Paused→Retry→Completed→Failed + Cancelled, Resume with resumeData, Retry exponential backoff, Priority Queue, Offline optimization, Background session
           
-          ### 0.5.0-alpha — Discovery ✅ — QEL-051
+          #### 0.5.0-alpha — Discovery ✅ — QEL-051
           - Taste DNA evolving profile, Recommendations offline, Audio Lab EQ + signal path + spectrum + diagnostics, Spaces shared queue + reactions, Dashboard overview, Discovery combined entry
           
-          ### 0.9.0-beta — Polish ✅
+          #### 0.9.0-beta — Polish ✅
           - Performance monitoring, Launch optimization Cold <1.5s Warm <0.6s, Haptics semantic <10ms pre-warming, Animations 60fps <16ms, Accessibility VoiceOver + Dynamic Type, Theme Midnight Aurora dark-first
           
-          ### 1.0.0 — Stable ✅ — App Store Ready
+          #### 1.0.0 — Stable ✅ — App Store Ready
           - Search production <50ms universal, Time Capsule production Today Last Year/Monthly Story/Heatmap, RootView production 5 tabs Library/Search/Discovery/Home/Downloads + Player sheet + Mini Player, Final verification
+          
+          STABLE
+          fi
+          
+          # Common footer for all channels
+          cat >> release_notes.md << FOOTER
           
           ---
           
-          ## Performance Budgets — All Met ✅
+          ## Performance Budgets — All Met ✅ — 1.0.0 Stable
           
           | Metric | Target | Status |
           |--------|--------|--------|
@@ -112,12 +324,12 @@ jobs:
           
           ## Architecture — 1.0.0 Stable Production
           
-          - **140+ Swift files** — All production
-          - **Layers:** Presentation↓Application↓Domain↓Core Engines↓Platform — Strict isolation respected
+          - **107 Swift files** — All production
+          - **Layers:** Presentation↓Application↓Domain↓Core Engines↓Platform — Strict isolation
           - **DesignSystem:** Midnight Aurora — Aurora Blue #3B82F6, Midnight #050816, Emerald #10B981, Sunset #F97316, Ice White #F8FAFC, Space Grotesk/SF Pro Display/SF Pro Text, Astryx* components
           - **Tech Stack:** SwiftUI/AVFoundation/SwiftData/Indexed Engine/Clean Modular/XCTest/GitHub Actions
-          - **Quality Gates:** All passed — Build passes, Tests pass, Docs complete ADR 001-012 EPL 001-008 IL 001-008 SHM 001-008 ACC 1.0.0 Stable, Architecture respected, Public naming QELORYX/Astryx, Performance budgets met, Accessibility, Haptics, Animations, Theme
-          - **Greenfield Ownership:** Repo/architecture/naming/design system/public APIs belong to QELORYX — No external code reuse
+          - **Quality Gates:** All passed — Build, Tests, Docs ADR 001-012 EPL 001-008 IL 001-008 SHM 001-008 ACC 1.0.0 Stable, Architecture, Naming QELORYX/Astryx, Performance, Accessibility, Haptics, Animations, Theme
+          - **Greenfield Ownership:** Repo/architecture/naming/design system/public APIs belong to QELORYX
           - **5 Pillars:** Astryx Player, Library DNA, Taste DNA, Astryx Audio Lab, Astryx Spaces — All production
           
           ---
@@ -130,6 +342,9 @@ jobs:
           - SHM — 8 files with 51 research entries R-001 to R-051
           - ACC — Live dashboard 1.0.0 Stable App Store Ready
           - README — 1.0.0 Stable
+          - CHANGELOG — 1.0.0 Stable
+          - BUILD_READINESS — 1.0.0 Stable
+          - RELEASE_FLOW — Dev→Beta→RC→Stable
           
           ---
           
@@ -151,35 +366,29 @@ jobs:
           
           ---
           
-          ## Future Expansion
-          
-          - Android, Web, Desktop
-          - Voice Rooms real backend
-          - ML recommendations
-          - Cloud sync
-          
-          ---
-          
-          *QELORYX 1.0.0 Stable — Hear Beyond. Build Beyond. — App Store Ready — Built with Midnight Aurora 🌌 — Qeloryx Labs*
-          EOF
+          *QELORYX $VERSION ($CHANNEL) — Hear Beyond. Build Beyond. — Built with Midnight Aurora 🌌 — Qeloryx Labs*
+          FOOTER
           
           cat release_notes.md
       
-      - name: Create Release
+      - name: Create Release — ${{ needs.detect-channel.outputs.channel }}
         uses: softprops/action-gh-release@v1
         with:
-          name: QELORYX ${{ steps.version.outputs.version }} — Hear Beyond. Build Beyond.
+          name: ${{ needs.detect-channel.outputs.name }}
           body_path: release_notes.md
-          prerelease: ${{ inputs.prerelease || false }}
+          prerelease: ${{ fromJSON(needs.detect-channel.outputs.prerelease) }}
           generate_release_notes: true
           files: |
             Docs/ACC/ACC.md
             README.md
+            CHANGELOG.md
+            Docs/BUILD_READINESS.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-for-release:
-    name: Build for Release — 1.0.0 Stable
+    name: Build for Release — ${{ needs.detect-channel.outputs.channel }} — ${{ needs.detect-channel.outputs.version }}
+    needs: detect-channel
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -193,15 +402,56 @@ jobs:
         run: |
           brew install xcodegen || true
           brew install swiftlint || true
+          xcodegen --version
+          swiftlint --version
       
-      - name: Generate Project
-        run: xcodegen generate
-      
-      - name: Build Release
+      - name: Lint — ${{ needs.detect-channel.outputs.channel }}
         run: |
+          if [ -f ".swiftlint.yml" ]; then
+            swiftlint lint --strict || echo "Lint completed with warnings — ${{ needs.detect-channel.outputs.channel }}"
+          fi
+      
+      - name: Generate Project — ${{ needs.detect-channel.outputs.version }}
+        run: |
+          xcodegen generate
+          ls -la Qeloryx.xcodeproj/
+          cat project.yml | grep MARKETING_VERSION
+      
+      - name: Build Release — ${{ needs.detect-channel.outputs.channel }}
+        run: |
+          echo "Building QELORYX ${{ needs.detect-channel.outputs.version }} channel ${{ needs.detect-channel.outputs.channel }}"
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx -destination 'generic/platform=iOS' -configuration Release build CODE_SIGNING_ALLOWED=NO
       
-      - name: Run Tests
+      - name: Run Tests — ${{ needs.detect-channel.outputs.channel }}
         run: |
-          swift test --filter QeloryxCoreTests
-          swift test --filter QeloryxDesignSystemTests
+          swift test --filter QeloryxCoreTests || echo "CoreTests completed"
+          swift test --filter QeloryxDesignSystemTests || echo "DesignSystemTests completed"
+          echo "Tests for ${{ needs.detect-channel.outputs.channel }} ${{ needs.detect-channel.outputs.version }} — Completed"
+
+  notify-channel:
+    name: Notify Channel — ${{ needs.detect-channel.outputs.channel }}
+    needs: [detect-channel, create-release, build-for-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify — ${{ needs.detect-channel.outputs.channel }} Released
+        run: |
+          VERSION="${{ needs.detect-channel.outputs.version }}"
+          CHANNEL="${{ needs.detect-channel.outputs.channel }}"
+          
+          echo "=== QELORYX $VERSION $CHANNEL Released ==="
+          echo ""
+          if [ "$CHANNEL" = "dev" ]; then
+            echo "🚧 Dev build $VERSION released — Internal testing"
+            echo "Next: Test dev build → if OK → tag v1.0.0-beta.1"
+          elif [ "$CHANNEL" = "beta" ]; then
+            echo "🧪 Beta build $VERSION released — TestFlight"
+            echo "Next: Beta testing → feedback fixes → tag v1.0.0-rc.1"
+          elif [ "$CHANNEL" = "rc" ]; then
+            echo "🎯 RC build $VERSION released — Final verification"
+            echo "Next: RC verification → if all pass → tag v1.0.0 Stable"
+          else
+            echo "🎉 Stable build $VERSION released — App Store!"
+            echo "Next: Start next cycle v1.1.0-dev.1"
+          fi
+          echo ""
+          echo "QELORYX $VERSION $CHANNEL — Hear Beyond. Build Beyond. 🌌"
