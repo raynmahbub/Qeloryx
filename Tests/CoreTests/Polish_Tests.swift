@@ -97,23 +97,18 @@ final class PolishTests: XCTestCase {
     }
     
     func testHaptics() {
-        // Haptics should not crash, even on Linux fallback
-        let engine = AstryxHapticEngine.shared
+        // Core haptics fallback should not crash, even without Platform/UIKit
+        let engine = FallbackHapticEngine()
         engine.trigger(.light)
         engine.trigger(.medium)
         engine.trigger(.heavy)
         engine.trigger(.selection)
         engine.trigger(.success)
+        engine.trigger(.warning)
+        engine.trigger(.error)
         engine.triggerPlay()
         engine.triggerPause()
         engine.triggerFavorite()
-        engine.triggerSeek()
-        engine.triggerQueueAdd()
-        engine.triggerDownloadStart()
-        engine.triggerDownloadComplete()
-        engine.triggerError()
-        engine.triggerTabChange()
-        engine.triggerLyricTap()
         
         // If we reach here without crash, test passes
         XCTAssertTrue(true)
