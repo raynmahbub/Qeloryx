@@ -35,6 +35,7 @@ let package = Package(
                 "EventBus",
                 "CapabilityRegistry",
                 "ProviderLayer",
+                "QueueEngine",
                 "Shared"
             ],
             swiftSettings: [
