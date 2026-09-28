@@ -280,7 +280,7 @@ public final class DiscoveryViewModel: ObservableObject {
     public func load() async {
         isLoading = true
         
-        let tracks = (try? await libraryEngine.fetchTracks(predicate: nil)) ?? []
+        let tracks = (try? await libraryEngine.fetchAllTracks()) ?? []
         
         if tracks.isEmpty {
             // Mock for preview

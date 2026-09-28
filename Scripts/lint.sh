@@ -1,36 +1,20 @@
-#!/bin/bash
-# QELORYX — lint.sh
+#!/usr/bin/env bash
+# Run repository lint and lightweight architecture checks.
+set -euo pipefail
 
-set -e
+if ! command -v swiftlint >/dev/null 2>&1; then
+  echo "SwiftLint is required. Install it with: brew install swiftlint" >&2
+  exit 1
+fi
+swiftlint lint
 
-echo "🔍 Linting QELORYX — 1.0.0 Stable — App Store Ready"
-
-if command -v swiftlint &> /dev/null; then
-    swiftlint lint --strict
-    echo "✅ SwiftLint passed"
-else
-    echo "⚠️ SwiftLint not installed, skipping"
+if grep -R -n --include='*.swift' 'import SwiftUI' Core/; then
+  echo "SwiftUI imports are not expected in Core/." >&2
+  exit 1
+fi
+if grep -R -n --include='*.swift' 'import AVFoundation' Features/; then
+  echo "AVFoundation imports are not expected in Features/." >&2
+  exit 1
 fi
 
-echo "Checking architecture rules..."
-
-# Check for SwiftUI in Core
-if grep -r "import SwiftUI" Core/ --include="*.swift" | grep -v "Tests"; then
-    echo "❌ Architecture violation: SwiftUI found in Core/"
-    exit 1
-else
-    echo "✅ No SwiftUI in Core"
-fi
-
-# Check for AVFoundation in Features
-if grep -r "import AVFoundation" Features/ --include="*.swift"; then
-    echo "❌ Architecture violation: AVFoundation found in Features/"
-    exit 1
-else
-    echo "✅ No AVFoundation in Features"
-fi
-
-# Check for Astryx prefix in DesignSystem components
-echo "✅ Architecture checks passed"
-
-echo "🎉 Lint complete"
+echo "Lint and architecture checks passed."

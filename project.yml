@@ -25,7 +25,7 @@ settings:
     Release:
       DEBUG: NO
 
-settingsGroups:
+settingGroups:
   app:
     base:
       INFOPLIST_FILE: App/Info.plist

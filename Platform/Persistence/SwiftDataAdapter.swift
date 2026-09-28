@@ -249,7 +249,8 @@ public final class SwiftDataAdapter: SwiftDataStackProtocol {
     }
     
     public func updateTrack(_ track: AstryxTrack) async throws {
-        let predicate = #Predicate<TrackModel> { $0.id == track.id }
+        let trackID = track.id
+        let predicate = #Predicate<TrackModel> { $0.id == trackID }
         let descriptor = FetchDescriptor<TrackModel>(predicate: predicate)
         let models = try context.fetch(descriptor)
         if let existing = models.first {
@@ -376,7 +377,8 @@ public final class SwiftDataAdapter: SwiftDataStackProtocol {
     }
     
     public func updateLibrary(_ library: AstryxLibrary) async throws {
-        let predicate = #Predicate<LibraryModel> { $0.id == library.id }
+        let libraryID = library.id
+        let predicate = #Predicate<LibraryModel> { $0.id == libraryID }
         let descriptor = FetchDescriptor<LibraryModel>(predicate: predicate)
         let models = try context.fetch(descriptor)
         if let existing = models.first {

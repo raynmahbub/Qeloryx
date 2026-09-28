@@ -1,287 +1,115 @@
-name: CI — QELORYX 1.0.0 Stable
+name: CI
 
 on:
-  push:
-    branches: [ main, arena/*, feature/*, release/* ]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+  push:
+    branches: [main, 'feature/**', 'release/**', 'arena/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: SwiftLint — Check
-    runs-on: ubuntu-latest
+  swift-package:
+    name: Swift package build and tests
+    runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: SwiftLint
-        uses: norio-nomura/action-swiftlint@3.2.1
+      - uses: actions/checkout@v5
+      - name: Select supported Xcode toolchain
+        uses: maxim-lobanov/setup-xcode@v1.7.0
         with:
-          args: --lenient
-        continue-on-error: true
-      
-      - name: SwiftLint Strict Check (non-blocking for dev)
-        run: |
-          echo "Lint check completed — dev build allows warnings"
-          echo "For v0.0.1-dev, strict lint is non-blocking"
-
-  spm-build:
-    name: SPM Build — Core + DesignSystem + Platform — Dev 0.0.1
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.4'
-      
-      - name: Swift Version
+          xcode-version: '16.4'
+      - name: Show toolchain
         run: swift --version
-      
-      - name: Build QeloryxCore
-        run: swift build --target QeloryxCore -c debug || swift build --target QeloryxCore -c release || echo "Core build attempted"
-        continue-on-error: true
-      
-      - name: Build QeloryxDesignSystem
-        run: swift build --target QeloryxDesignSystem -c debug || swift build --target QeloryxDesignSystem -c release || echo "DesignSystem build attempted"
-        continue-on-error: true
-      
-      - name: Build QeloryxPlatform
-        run: swift build --target QeloryxPlatform -c debug || swift build --target QeloryxPlatform -c release || echo "Platform build attempted"
-        continue-on-error: true
-      
-      - name: Build All SPM
-        run: swift build -c debug || swift build -c release || echo "SPM build completed with warnings for dev 0.0.1"
-
-  spm-tests:
-    name: SPM Tests — Core + DesignSystem — Dev 0.0.1
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
+      - name: Build
+        run: swift build -v 2>&1 | tee swift-build.log
+      - name: Test
+        run: swift test --enable-code-coverage 2>&1 | tee swift-test.log
+      - name: Upload Swift diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
-          xcode-version: '15.4'
-      
-      - name: Run Core Tests
-        run: swift test --filter QeloryxCoreTests --enable-code-coverage || swift test --filter QeloryxCoreTests || echo "CoreTests attempted for dev 0.0.1"
-        continue-on-error: true
-      
-      - name: Run DesignSystem Tests
-        run: swift test --filter QeloryxDesignSystemTests --enable-code-coverage || swift test --filter QeloryxDesignSystemTests || echo "DesignSystemTests attempted for dev 0.0.1"
-        continue-on-error: true
+          name: swift-diagnostics-${{ github.sha }}
+          path: |
+            swift-build.log
+            swift-test.log
+          if-no-files-found: ignore
+          retention-days: 5
+
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Lint
+        run: swiftlint lint 2>&1 | tee swiftlint.log
+      - name: Upload SwiftLint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: swiftlint-diagnostics-${{ github.sha }}
+          path: swiftlint.log
+          if-no-files-found: ignore
+          retention-days: 5
 
   ios-build:
-    name: iOS Build — XcodeGen + xcodebuild
-    runs-on: macos-14
+    name: iOS simulator build
+    runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.4'
-      
-      - name: Install Tools
+      - uses: actions/checkout@v5
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build unsigned simulator app
         run: |
-          brew install xcodegen || true
-          brew install swiftlint || true
-          xcodegen --version
-          swiftlint --version
-      
-      - name: Generate Xcode Project — Dev 0.0.1
+          set -o pipefail
+          xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -quiet CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
+      - name: Surface compiler errors in check annotations
+        if: failure()
         run: |
-          if [ -f "project.yml" ]; then
-            xcodegen generate || echo "xcodegen generate attempted for dev 0.0.1"
-            ls -la Qeloryx.xcodeproj/ || echo "Project not generated but continuing for dev"
-          else
-            echo "No project.yml found"
-            exit 1
-          fi
-        continue-on-error: true
-      
-      - name: Check Project Structure — 1.0.0 Stable
-        run: |
-          echo "=== App ==="
-          ls -la App/
-          echo "=== Core — All Engines ==="
-          ls -la Core/
-          ls -la Core/TasteDNA/
-          ls -la Core/DownloadEngine/
-          ls -la Core/Shared/Performance/
-          echo "=== Features — All Production ==="
-          ls -la Features/
-          ls -la Features/Library/Presentation/
-          ls -la Features/Search/Presentation/
-          ls -la Features/Lyrics/Presentation/
-          ls -la Features/Downloads/Presentation/
-          ls -la Features/Discovery/
-          ls -la Features/AudioLab/
-          ls -la Features/Spaces/
-          ls -la Features/Dashboard/
-          ls -la Features/TimeCapsule/
-          echo "=== Platform ==="
-          ls -la Platform/
-          echo "=== DesignSystem — Midnight Aurora ==="
-          ls -la DesignSystem/
-          ls -la DesignSystem/Animations/
-          echo "=== Docs — Complete ==="
-          ls -la Docs/ADR/ | wc -l
-          ls -la Docs/EPL/ | wc -l
-          ls -la Docs/IL/ | wc -l
-          ls -la Docs/SHM/ | wc -l
-          ls -la Docs/ACC/
-      
-      - name: Validate ACC — Dev 0.0.1 Compatible
-        run: |
-          cat Docs/ACC/ACC.md
-          grep -q -E "1.0.0|0.0.1" Docs/ACC/ACC.md || (echo "ACC version not 1.0.0 or 0.0.1" && exit 1)
-          echo "ACC OK — Dev 0.0.1 compatible"
-        continue-on-error: true
-      
-      - name: Build iOS App — Debug — Dev 0.0.1
-        run: |
-          xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' -configuration Debug build CODE_SIGNING_ALLOWED=NO | xcpretty || xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx -destination 'platform=iOS Simulator,name=iPhone 15' -configuration Debug build CODE_SIGNING_ALLOWED=NO || echo "iOS build attempted for dev 0.0.1 — non-blocking"
-        continue-on-error: true
-      
-      - name: Run iOS Tests — Dev 0.0.1
-        run: |
-          xcodebuild test -project Qeloryx.xcodeproj -scheme Qeloryx -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' CODE_SIGNING_ALLOWED=NO | xcpretty || echo "iOS tests completed with warnings for dev 0.0.1"
-        continue-on-error: true
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
-  performance-budget:
-    name: Performance Budget Check — All Met ✅
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Check Performance Budgets — 1.0.0 Stable
-        run: |
-          echo "=== QELORYX Performance Budgets — 1.0.0 Stable ==="
-          echo "Cold Launch <1.5s — via LaunchOptimizer + defer non-critical + background pre-warm"
-          echo "Warm Launch <0.6s — via cached library + no re-indexing + memory artwork cache"
-          echo "Search <50ms — via indexed search inverted index + debounce 150ms"
-          echo "Library Open <200ms — via in-memory grouping Dictionary"
-          echo "Queue Instant <10ms"
-          echo "Seek <50ms"
-          echo "Play/Pause Instant <10ms + haptics <10ms pre-warming"
-          echo "Lyrics Sync <50ms — 100ms timer <1ms lookup"
-          echo "Karaoke <100ms — 100ms timer word-level"
-          echo "Download Enqueue <50ms — in-memory"
-          echo "Download Progress <100ms — via delegate"
-          echo "Taste DNA Gen <200ms — for 1000 tracks"
-          echo "Recommendations <100ms"
-          echo "Animations <16ms per frame 60fps — spring animations"
-          echo "Haptics <10ms — pre-warming"
-          echo "Navigation <50ms"
-          echo ""
-          echo "All budgets met ✅ — 1.0.0 Stable"
-          
-          # Check that PerformanceMonitor exists
-          test -f Core/Shared/Performance/PerformanceMonitor.swift || (echo "PerformanceMonitor missing" && exit 1)
-          test -f Platform/System/LaunchOptimizer.swift || (echo "LaunchOptimizer missing" && exit 1)
-          echo "Performance files OK"
+          lines = Path("xcodebuild.log").read_text(errors="replace").splitlines()
+          matches = [line for line in lines if re.search(r"\berror:", line)]
+          for line in matches[:20]:
+              escaped = line.replace("%", "%25").replace("\\r", "%0D").replace("\\n", "%0A")
+              print(f"::error title=Xcode build diagnostic::{escaped}")
+          if not matches:
+              print("::error title=Xcode build failed::No compiler diagnostic line was found; inspect the uploaded xcodebuild log artifact.")
+          PY
+      - name: Upload Xcode diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xcode-diagnostics-${{ github.sha }}
+          path: xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 5
 
   docs:
-    name: Documentation Check — Complete ✅
+    name: Documentation sanity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Check Engineering Docs — Dev 0.0.1 Compatible
+      - uses: actions/checkout@v5
+      - name: Verify required docs and links
         run: |
-          echo "=== Checking engineering docs — Dev 0.0.1 Compatible ==="
-          echo "ADR — 12 files expected"
-          ls -la Docs/ADR/
-          test $(ls Docs/ADR/*.md | wc -l) -ge 12 || (echo "ADR incomplete, expected 12" && exit 1)
-          
-          echo "EPL — 8 files expected"
-          ls -la Docs/EPL/
-          test $(ls Docs/EPL/*.md | wc -l) -ge 8 || (echo "EPL incomplete, expected 8" && exit 1)
-          
-          echo "IL — 8 files expected"
-          ls -la Docs/IL/
-          test $(ls Docs/IL/*.md | wc -l) -ge 8 || (echo "IL incomplete, expected 8" && exit 1)
-          
-          echo "SHM — 8 files expected with 51 research entries"
-          ls -la Docs/SHM/
-          test $(ls Docs/SHM/*.md | wc -l) -ge 8 || (echo "SHM incomplete, expected 8" && exit 1)
-          
-          echo "ACC — Live dashboard"
-          test -f Docs/ACC/ACC.md || (echo "ACC missing" && exit 1)
-          test -f Docs/ACC/AGENT_STATE.md || (echo "AGENT_STATE missing" && exit 1)
-          cat Docs/ACC/ACC.md | head -20
-          
-          echo "README — Dev 0.0.1 compatible"
-          test -f README.md || (echo "README missing" && exit 1)
-          grep -q -E "1.0.0|0.0.1" README.md || (echo "README version not 1.0.0 or 0.0.1" && exit 1)
-          
-          echo "Docs OK — Dev 0.0.1 Compatible ✅"
-
-  architecture:
-    name: Architecture Check — No Layer Violation
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Check Layer Isolation — Clean Modular
-        run: |
-          echo "=== Checking architectural layers — Presentation↓Application↓Domain↓Core Engines↓Platform ==="
-          echo "Rules:"
-          echo "- SwiftUI only in Presentation"
-          echo "- Business logic never in Views"
-          echo "- Platform APIs isolated"
-          echo "- Communication via EventBus"
-          echo "- Public naming QELORYX/Astryx"
-          echo ""
-          
-          # Check that Core does not import SwiftUI (should be pure Swift)
-          if grep -r "import SwiftUI" Core/ --include="*.swift" | grep -v "Preview" | head -5; then
-            echo "⚠️ Core imports SwiftUI — checking if allowed (should be minimal)"
-            # Allow some but warn — for 1.0.0 we have some SwiftUI in Features only, Core should be clean
-            if grep -r "import SwiftUI" Core/ --include="*.swift" | grep -v "Preview" | grep -v "TasteDNAView" | wc -l | xargs test 0 -eq || true; then
-              echo "Core SwiftUI check — some files may import for previews, OK for 1.0.0"
-            fi
-          else
-            echo "✅ Core does not import SwiftUI — clean"
-          fi
-          
-          # Check public naming
-          echo "Checking public naming Astryx* / Qeloryx..."
-          grep -r "public struct Astryx" Core/ --include="*.swift" | wc -l
-          grep -r "public struct Qeloryx" App/ --include="*.swift" | wc -l
-          
-          # Check DesignSystem uses Astryx prefix
-          ls DesignSystem/Components/Astryx*.swift | wc -l
-          
-          echo "Architecture OK — 1.0.0 Stable ✅"
-
-  quality-gates:
-    name: Quality Gates — All Passed ✅
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Check Quality Gates — 1.0.0 Stable
-        run: |
-          echo "=== QELORYX Quality Gates — 1.0.0 Stable ==="
-          echo "- [x] Build passes (140+ Swift files, all production)"
-          echo "- [x] Tests pass"
-          echo "- [x] Documentation updated (ADR 001-012, EPL 001-008, IL 001-008, SHM 001-008, ACC 1.0.0 Stable)"
-          echo "- [x] Architecture respected (no layer violation, Platform isolated, Core via protocols, Features uses Core, App composes)"
-          echo "- [x] Public naming uses QELORYX/Astryx"
-          echo "- [x] Performance budgets all met"
-          echo "- [x] Accessibility VoiceOver + Dynamic Type"
-          echo "- [x] Haptics semantic with pre-warming <10ms"
-          echo "- [x] Animations 60fps <16ms per frame"
-          echo "- [x] Theme Midnight Aurora dark-first"
-          echo "- [x] Greenfield ownership QELORYX"
-          echo "- [x] 5 pillars production"
-          echo "- [x] App Store Ready"
-          echo ""
-          echo "All quality gates passed ✅ — 1.0.0 Stable — App Store Ready"
+          set -euo pipefail
+          test -s README.md
+          test -s CHANGELOG.md
+          test -s Docs/BUILD_READINESS.md
+          test -s Docs/RELEASE_FLOW.md
+          test -s project.yml
+          test -s Package.swift
+          ! grep -R -nE 'TODO\(broken-link\)' README.md Docs

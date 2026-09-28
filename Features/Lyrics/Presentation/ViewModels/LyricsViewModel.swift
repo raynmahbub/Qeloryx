@@ -47,7 +47,7 @@ public final class LyricsViewModel: ObservableObject {
     // MARK: - Dependencies
     
     private let lyricsEngine: any LyricsEngineProtocol
-    private let playerEngine: any PlayerEngineProtocol
+    private let playerEngine: any AstryxAudioEngineProtocol
     private let eventBus: any EventBusProtocol
     
     private var cancellables = Set<AnyCancellable>()
@@ -56,7 +56,7 @@ public final class LyricsViewModel: ObservableObject {
     
     public init(
         lyricsEngine: any LyricsEngineProtocol = AstryxLyricsEngine(),
-        playerEngine: any PlayerEngineProtocol = AstryxAudioEngine(),
+        playerEngine: any AstryxAudioEngineProtocol = AstryxAudioEngine(),
         eventBus: any EventBusProtocol = AstryxEventBus.shared
     ) {
         self.lyricsEngine = lyricsEngine
@@ -78,7 +78,16 @@ public final class LyricsViewModel: ObservableObject {
         }
         
         // Playback state -> sync
-        let sub2 = eventBus.subscribe(to: QeloryxEvent.playbackStateChanged(state: .stopped).name) { [weak self] _ in
+        let stoppedState = PlaybackStateSnapshot(
+            trackID: nil,
+            isPlaying: false,
+            position: 0,
+            duration: 0,
+            queueVersion: 0,
+            shuffleEnabled: false,
+            repeatMode: .off
+        )
+        let sub2 = eventBus.subscribe(to: QeloryxEvent.playbackStateChanged(state: stoppedState).name) { [weak self] _ in
             Task { @MainActor in
                 self?.updateCurrentPosition()
             }
@@ -103,7 +112,7 @@ public final class LyricsViewModel: ObservableObject {
     }
     
     private func updateCurrentPosition() {
-        currentTime = playerEngine.currentTime
+        currentTime = playerEngine.playbackState.position
         
         guard let lyrics = lyrics else { return }
         

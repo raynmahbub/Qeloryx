@@ -113,7 +113,7 @@ public final class AstryxIndexedSearch: IndexedSearchProtocol, @unchecked Sendab
         }
         
         // Also search albums, artists by name
-        if query.filters?.types == nil || query.filters?.types?.contains(.album) == true {
+        if query.filters.types == nil || query.filters.types?.contains(.album) == true {
             for album in localAlbums.values {
                 if album.title.lowercased().contains(query.text.lowercased()) {
                     results.append(AstryxSearchResult(type: .album, title: album.title, subtitle: album.artist, albumID: album.id, score: 0.8))
@@ -121,7 +121,7 @@ public final class AstryxIndexedSearch: IndexedSearchProtocol, @unchecked Sendab
             }
         }
         
-        if query.filters?.types == nil || query.filters?.types?.contains(.artist) == true {
+        if query.filters.types == nil || query.filters.types?.contains(.artist) == true {
             for artist in localArtists.values {
                 if artist.name.lowercased().contains(query.text.lowercased()) {
                     results.append(AstryxSearchResult(type: .artist, title: artist.name, subtitle: "\(artist.trackCount) tracks", artistID: artist.id, score: 0.8))
