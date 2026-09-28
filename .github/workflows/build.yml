@@ -59,7 +59,7 @@ jobs:
           APP="$RUNNER_TEMP/DerivedData/Build/Products/${{ inputs.configuration || 'Debug' }}-iphonesimulator/Qeloryx.app"
           test -d "$APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" Qeloryx-simulator.zip
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: Qeloryx-simulator-${{ github.sha }}
           path: Qeloryx-simulator.zip

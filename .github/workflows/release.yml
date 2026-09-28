@@ -48,7 +48,7 @@ jobs:
           APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphonesimulator/Qeloryx.app"
           test -d "$APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" Qeloryx-simulator.zip
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: release-simulator-app
           path: Qeloryx-simulator.zip
@@ -60,7 +60,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           name: release-simulator-app
       - name: Publish release

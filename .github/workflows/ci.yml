@@ -32,7 +32,7 @@ jobs:
         run: swift test --enable-code-coverage 2>&1 | tee swift-test.log
       - name: Upload Swift diagnostics
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: swift-diagnostics-${{ github.sha }}
           path: |
@@ -52,7 +52,7 @@ jobs:
         run: swiftlint lint 2>&1 | tee swiftlint.log
       - name: Upload SwiftLint diagnostics
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: swiftlint-diagnostics-${{ github.sha }}
           path: swiftlint.log
@@ -74,9 +74,24 @@ jobs:
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
+      - name: Surface compiler errors in check annotations
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          lines = Path("xcodebuild.log").read_text(errors="replace").splitlines()
+          matches = [line for line in lines if re.search(r"\berror:|BUILD FAILED|SwiftCompile", line)]
+          for line in matches[:20]:
+              escaped = line.replace("%", "%25").replace("\\r", "%0D").replace("\\n", "%0A")
+              print(f"::error title=Xcode build diagnostic::{escaped}")
+          if not matches:
+              print("::error title=Xcode build failed::No compiler diagnostic line was found; inspect the uploaded xcodebuild log artifact.")
+          PY
       - name: Upload Xcode diagnostics
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: xcode-diagnostics-${{ github.sha }}
           path: xcodebuild.log
