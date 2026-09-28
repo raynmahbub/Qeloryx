@@ -1,175 +1,32 @@
-name: Performance — QELORYX Budgets Check — Dev 0.0.1
+name: Performance checks
 
 on:
-  push:
-    branches: [ main, arena/* ]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+    paths:
+      - 'Core/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - '.github/workflows/performance.yml'
   workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * 0' # Weekly on Sunday
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  performance-budgets:
-    name: Performance Budgets — All Met — Dev 0.0.1
-    runs-on: macos-14
+  performance-tests:
+    name: Run performance-related tests
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.4'
-      
-      - name: Check Performance Budgets — Dev 0.0.1
+      - name: Run package tests
+        run: swift test --enable-code-coverage
+      - name: Confirm instrumentation is present
         run: |
-          echo "=== QELORYX Performance Budgets — Dev 0.0.1 ==="
-          echo ""
-          echo "| Metric | Target | Current | Status |"
-          echo "|--------|--------|---------|--------|"
-          echo "| Cold Launch | <1.5s (target) <2s dev | <1.5s | ✅ |"
-          echo "| Warm Launch | <0.6s (target) <1s dev | <0.6s | ✅ |"
-          echo "| Search | <50ms (target) <100ms dev | <50ms | ✅ |"
-          echo "| Library Open | <200ms | <200ms | ✅ |"
-          echo "| Queue | Instant <10ms | Instant <10ms | ✅ |"
-          echo "| Seek | <50ms | <50ms | ✅ |"
-          echo "| Play/Pause | Instant <10ms + haptics <10ms | Instant | ✅ |"
-          echo "| Lyrics Sync | <50ms | <50ms | ✅ |"
-          echo "| Karaoke Sync | <100ms | <100ms | ✅ |"
-          echo "| Download Enqueue | <50ms | <50ms | ✅ |"
-          echo "| Download Progress | <100ms | <100ms | ✅ |"
-          echo "| Taste DNA Gen | <200ms | <200ms | ✅ |"
-          echo "| Recommendations | <100ms | <100ms | ✅ |"
-          echo "| Animations | <16ms 60fps | <16ms | ✅ |"
-          echo "| Haptics | <10ms | <10ms | ✅ |"
-          echo "| Navigation | <50ms | <50ms | ✅ |"
-          echo ""
-          echo "All budgets met ✅ — Dev 0.0.1 — Build Ready"
-          echo ""
-          
-          # Verify performance files exist — Dev 0.0.1 compatible
-          echo "=== Verifying performance implementation files — Dev 0.0.1 ==="
-          test -f Core/Shared/Performance/PerformanceMonitor.swift && echo "✅ PerformanceMonitor.swift" || (echo "❌ PerformanceMonitor missing" && exit 1)
-          test -f Platform/System/LaunchOptimizer.swift && echo "✅ LaunchOptimizer.swift" || (echo "❌ LaunchOptimizer missing" && exit 1)
-          test -f Platform/Haptics/HapticEngine.swift && echo "✅ HapticEngine.swift" || (echo "❌ HapticEngine missing" && exit 1)
-          test -f DesignSystem/Animations/AstryxAnimations.swift && echo "✅ AstryxAnimations.swift" || (echo "❌ AstryxAnimations missing" && exit 1)
-          test -f App/QeloryxApp.swift && echo "✅ QeloryxApp.swift with launch optimization" || (echo "❌ QeloryxApp missing" && exit 1)
-          
-          echo ""
-          echo "=== Checking ACC for Dev 0.0.1 compatible ==="
-          grep -q -E "1.0.0|0.0.1" Docs/ACC/ACC.md && echo "✅ ACC version 0.0.1 or 1.0.0" || (echo "❌ ACC version not 0.0.1 or 1.0.0" && exit 1)
-          grep -q -E "Cold Launch.*✅|Cold Launch" Docs/ACC/ACC.md && echo "✅ ACC Cold Launch check" || echo "⚠️ ACC Cold Launch check"
-          grep -q -E "Search.*✅|Search" Docs/ACC/ACC.md && echo "✅ ACC Search check" || echo "⚠️ ACC Search check"
-          
-          echo ""
-          echo "Performance budgets verified — Dev 0.0.1 ✅"
-
-  cold-launch-simulation:
-    name: Cold Launch Simulation — <1.5s Target — Dev 0.0.1
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.4'
-      
-      - name: Simulate Cold Launch — Dev 0.0.1
-        run: |
-          echo "=== Simulating Cold Launch — Target <1.5s (Dev allows <2s) — Dev 0.0.1 ==="
-          echo "Steps:"
-          echo "1. App init — optimizeColdLaunch() start tracking"
-          echo "2. Defer non-critical initializations"
-          echo "3. Lazy load heavy engines (Library, Search, TasteDNA, Downloads)"
-          echo "4. Use in-memory cache for library first"
-          echo "5. Avoid synchronous file I/O on main thread"
-          echo "6. Pre-warm audio session in background via DispatchQueue.global"
-          echo "7. Register background tasks"
-          echo "8. Register providers"
-          echo "9. End tracking — should be <1.5s target, <2s OK for dev"
-          echo ""
-          echo "Cold Launch optimization implemented in:"
-          echo "- Platform/System/LaunchOptimizer.swift — optimizeColdLaunch()"
-          echo "- Core/Shared/Performance/PerformanceMonitor.swift — startLaunchTracking(isCold: true)"
-          echo "- App/QeloryxApp.swift — init() calls optimizeColdLaunch() immediately"
-          echo ""
-          echo "✅ Cold Launch <1.5s target — Dev 0.0.1 — Build Ready"
-
-  warm-launch-simulation:
-    name: Warm Launch Simulation — <0.6s Target — Dev 0.0.1
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Simulate Warm Launch — Dev 0.0.1
-        run: |
-          echo "=== Simulating Warm Launch — Target <0.6s (Dev allows <1s) — Dev 0.0.1 ==="
-          echo "Steps:"
-          echo "1. App init — optimizeWarmLaunch() start tracking isCold false"
-          echo "2. Use cached library — no re-indexing"
-          echo "3. Restore player state quickly"
-          echo "4. Artwork from memory cache (LRU 200)"
-          echo "5. No file I/O on main thread"
-          echo "6. End tracking — should be <0.6s target, <1s OK for dev"
-          echo ""
-          echo "Warm Launch optimization implemented in:"
-          echo "- Platform/System/LaunchOptimizer.swift — optimizeWarmLaunch()"
-          echo "- App/QeloryxApp.swift — onAppear optimizeWarmLaunch + asyncAfter 0.1s end"
-          echo ""
-          echo "✅ Warm Launch <0.6s target — Dev 0.0.1 — Build Ready"
-
-  search-performance:
-    name: Search Performance — <50ms Target — Dev 0.0.1
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.4'
-      
-      - name: Check Search Performance — <50ms — Dev 0.0.1
-        run: |
-          echo "=== Search Performance — Target <50ms (Dev allows <100ms) — Dev 0.0.1 ==="
-          echo "Implementation:"
-          echo "- Core/SearchEngine/IndexedSearch.swift — invertedIndex token->Set IDs, AND with OR fallback fuzzy, prefix matches instant, calculateScore, sorted score, elapsed check >50ms warning"
-          echo "- Features/Search/Presentation/ViewModels/SearchViewModel.swift — debounce 150ms removeDuplicates, PerformanceMetric record Search duration target 50ms"
-          echo "- PerformanceMonitor measures and records"
-          echo ""
-          echo "Testing search performance via SPM tests..."
-          swift test --filter SearchEngineTests || echo "Search tests completed for dev 0.0.1"
-          echo ""
-          echo "✅ Search <50ms target — Dev 0.0.1 — Build Ready"
-        continue-on-error: true
-
-  final-verification:
-    name: Final Verification — Dev 0.0.1 Build Ready
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Final Verification — All Quality Gates — Dev 0.0.1
-        run: |
-          echo "=== QELORYX Final Verification — Dev 0.0.1 — Build Ready ==="
-          echo ""
-          echo "Build: 107 Swift files, all production ✅ — Dev 0.0.1"
-          echo "Tests: CoreTests + DesignSystemTests — All Pass ✅ — Dev 0.0.1 compatible"
-          echo "Docs: ADR 001-012 (12), EPL 001-008 (8), IL 001-008 (8), SHM 001-008 (8) with 51 research entries, ACC 0.0.1-dev compatible, README 0.0.1-dev compatible ✅"
-          echo "Architecture: No layer violation, Platform isolated, Core via protocols, Features uses Core, App composes, no SwiftUI in Core, DesignSystem independent ✅"
-          echo "Public naming: QELORYX/Astryx ✅"
-          echo "Performance budgets: All met ✅ — Dev 0.0.1 allows relaxed <2s cold <100ms search"
-          echo "Accessibility: VoiceOver + Dynamic Type ✅"
-          echo "Haptics: Semantic with pre-warming <10ms ✅"
-          echo "Animations: 60fps <16ms per frame ✅"
-          echo "Theme: Midnight Aurora dark-first ✅"
-          echo "Greenfield ownership: QELORYX ✅"
-          echo "5 pillars: Astryx Player, Library DNA, Taste DNA, Astryx Audio Lab, Astryx Spaces — All production ✅"
-          echo "Version: MARKETING_VERSION 0.0.1 dev — v0.0.1-dev.1 published ✅"
-          echo "CI Fixed: All 4 previously failing jobs now success with lenient non-blocking for dev ✅"
-          echo "Dev Build: v0.0.1-dev.1 published — https://github.com/raynmahbub/Qeloryx/releases/tag/v0.0.1-dev.1 ✅"
-          echo "Official Release Sequence: Dev→Alpha→Beta→RC→Stable — Implemented ✅ — 1/5 Dev done"
-          echo "Build Ready: ✅ — Dev 0.0.1"
-          echo ""
-          echo "QELORYX Dev 0.0.1 — Hear Beyond. Build Beyond. — Build Ready — Built with Midnight Aurora 🌌 — Qeloryx Labs"
+          set -euo pipefail
+          test -f Core/Shared/Performance/PerformanceMonitor.swift
+          test -f Platform/System/LaunchOptimizer.swift
