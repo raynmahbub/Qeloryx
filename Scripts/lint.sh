@@ -3,7 +3,7 @@
 
 set -e
 
-echo "🔍 Linting QELORYX..."
+echo "🔍 Linting QELORYX — 1.0.0 Stable — App Store Ready"
 
 if command -v swiftlint &> /dev/null; then
     swiftlint lint --strict

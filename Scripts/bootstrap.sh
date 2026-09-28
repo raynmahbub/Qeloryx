@@ -4,8 +4,8 @@
 
 set -e
 
-echo "🎵 QELORYX Bootstrap — Midnight Aurora"
-echo "Version: 0.1.0-dev"
+echo "🎵 QELORYX Bootstrap — Midnight Aurora — 1.0.0 Stable — App Store Ready"
+echo "Version: 1.0.0 Stable — Hear Beyond. Build Beyond."
 echo ""
 
 # Check Xcode

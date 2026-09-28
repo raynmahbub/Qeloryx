@@ -3,7 +3,8 @@
 
 set -e
 
-echo "📚 Generating QELORYX documentation..."
+echo "📚 Generating QELORYX documentation — 1.0.0 Stable — App Store Ready"
+echo "Version: 1.0.0 Stable"
 
 # Check if jazzy is installed
 if ! command -v jazzy &> /dev/null; then
