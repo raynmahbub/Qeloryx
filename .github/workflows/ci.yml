@@ -31,9 +31,10 @@ jobs:
           set -o pipefail
           swift build -v 2>&1 | tee swift-build.log
       - name: Test
+        timeout-minutes: 25
         run: |
           set -o pipefail
-          swift test --enable-code-coverage 2>&1 | tee swift-test.log
+          swift test --enable-code-coverage -v 2>&1 | tee swift-test.log
       - name: Upload Swift diagnostics
         if: always()
         uses: actions/upload-artifact@v6

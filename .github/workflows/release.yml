@@ -32,9 +32,10 @@ jobs:
           set -o pipefail
           swift build -c release 2>&1 | tee swift-build-release.log
       - name: Test Swift package
+        timeout-minutes: 25
         run: |
           set -o pipefail
-          swift test -c release 2>&1 | tee swift-test-release.log
+          swift test -c release -v 2>&1 | tee swift-test-release.log
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -101,7 +102,12 @@ jobs:
               escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(f"::error title=Release build diagnostic::{escaped}")
           if not matches:
-              print("::error title=Release build failed::No error line was captured; inspect the uploaded release diagnostics artifact.")
+              print("::error title=Release build failed::No error line was captured; tail of captured logs follows, full detail in the release-diagnostics artifact.")
+              for log in Path(".").glob("*.log"):
+                  tail = log.read_text(errors="replace").splitlines()[-15:]
+                  for line in tail:
+                      escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                      print(f"::error title={log.name} tail::{escaped}")
           PY
       - name: Upload release diagnostics
         if: always()
