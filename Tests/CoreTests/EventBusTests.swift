@@ -21,16 +21,18 @@ final class EventBusTests: XCTestCase {
     func testPublishAndSubscribe() {
         let expectation = self.expectation(description: "Event received")
         var receivedEvent: QeloryxEvent?
-        
-        let _ = eventBus.subscribe { event in
+
+        // Hold the subscription: EventSubscription cancels on deinit,
+        // so discarding it immediately unregisters the observer.
+        let subscription = eventBus.subscribe { event in
             receivedEvent = event
             expectation.fulfill()
         }
-        
+
         eventBus.publish(.trackStarted(trackID: "123", queueID: "queue-1"))
-        
+
         waitForExpectations(timeout: 1.0)
-        
+
         XCTAssertNotNil(receivedEvent)
         if case .trackStarted(let trackID, let queueID) = receivedEvent {
             XCTAssertEqual(trackID, "123")
@@ -38,20 +40,22 @@ final class EventBusTests: XCTestCase {
         } else {
             XCTFail("Wrong event type")
         }
+        subscription.cancel()
     }
-    
+
     func testFilteredSubscription() {
         let expectation = self.expectation(description: "Filtered event")
         expectation.expectedFulfillmentCount = 1
-        
-        let _ = eventBus.subscribe(to: QeloryxEvent.trackStarted(trackID: "", queueID: "").name) { event in
+
+        let subscription = eventBus.subscribe(to: QeloryxEvent.trackStarted(trackID: "", queueID: "").name) { event in
             expectation.fulfill()
         }
-        
+
         eventBus.publish(.trackStarted(trackID: "1", queueID: "q1"))
         eventBus.publish(.trackPaused(trackID: "1", position: 0)) // Should not trigger
-        
+
         waitForExpectations(timeout: 1.0)
+        subscription.cancel()
     }
     
     func testUnsubscribe() {
@@ -88,15 +92,19 @@ final class EventBusTests: XCTestCase {
     func testMultipleSubscribers() {
         let exp = expectation(description: "multiple")
         exp.expectedFulfillmentCount = 3
-        
+
+        // Keep every subscription alive until the assertions complete.
+        var subscriptions: [EventSubscription] = []
         for _ in 0..<3 {
-            let _ = eventBus.subscribe { _ in
+            let subscription = eventBus.subscribe { _ in
                 exp.fulfill()
             }
+            subscriptions.append(subscription)
         }
-        
+
         eventBus.publish(.appDidEnterBackground)
-        
+
         waitForExpectations(timeout: 1.0)
+        subscriptions.forEach { $0.cancel() }
     }
 }
