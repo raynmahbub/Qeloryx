@@ -108,7 +108,6 @@ public final class AstryxNowPlayingManager: NowPlayingManagerProtocol, @unchecke
     public init() {}
     public func configure(handler: AnyObject?) {}
     public func configure(handler: NowPlayingCommandHandler? = nil) {}
-    public func updateNowPlaying(track: AstryxTrack?, isPlaying: Bool, position: TimeInterval, duration: TimeInterval?, artworkData: Data?) {}
     public func updateNowPlaying(track: AstryxTrack?, isPlaying: Bool, position: TimeInterval, duration: TimeInterval? = nil, artworkData: Data? = nil) {}
     public func updatePlaybackState(isPlaying: Bool, position: TimeInterval) {}
     public func clear() {}
