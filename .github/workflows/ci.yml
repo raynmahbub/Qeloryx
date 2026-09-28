@@ -27,9 +27,13 @@ jobs:
       - name: Show toolchain
         run: swift --version
       - name: Build
-        run: swift build -v 2>&1 | tee swift-build.log
+        run: |
+          set -o pipefail
+          swift build -v 2>&1 | tee swift-build.log
       - name: Test
-        run: swift test --enable-code-coverage 2>&1 | tee swift-test.log
+        run: |
+          set -o pipefail
+          swift test --enable-code-coverage 2>&1 | tee swift-test.log
       - name: Upload Swift diagnostics
         if: always()
         uses: actions/upload-artifact@v6
@@ -49,7 +53,9 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Lint
-        run: swiftlint lint 2>&1 | tee swiftlint.log
+        run: |
+          set -o pipefail
+          swiftlint lint 2>&1 | tee swiftlint.log
       - name: Upload SwiftLint diagnostics
         if: always()
         uses: actions/upload-artifact@v6
