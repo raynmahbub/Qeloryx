@@ -2,6 +2,10 @@
 // AstryxButton.swift
 // Premium button with haptic feedback
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public enum AstryxButtonStyle {

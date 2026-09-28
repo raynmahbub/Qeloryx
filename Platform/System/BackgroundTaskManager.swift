@@ -1,6 +1,10 @@
 // QELORYX — Platform
 // BackgroundTaskManager.swift
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 public final class AstryxBackgroundTaskManager: @unchecked Sendable {

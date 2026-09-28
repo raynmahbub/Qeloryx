@@ -2,6 +2,10 @@
 // AstryxArtwork.swift
 // Album artwork is primary visual anchor per spec
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxArtwork: View {

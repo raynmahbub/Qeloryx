@@ -1,6 +1,10 @@
 // QELORYX — DesignSystem
 // AstryxSlider.swift
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxSlider: View {

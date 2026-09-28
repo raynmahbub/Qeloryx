@@ -1,6 +1,10 @@
 // QELORYX — DesignSystem
 // AstryxCard.swift
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public enum AstryxCardStyle {

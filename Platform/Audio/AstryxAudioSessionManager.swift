@@ -2,6 +2,10 @@
 // AudioSessionManager.swift
 // QEL-012 Player — Real AVAudioSession handling
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 #if canImport(AVFoundation)

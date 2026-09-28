@@ -3,6 +3,10 @@
 // QEL-012 Player Milestone — Production AVFoundation implementation
 // Isolates AVFoundation — only place where AVFoundation is imported per architecture rules
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 #if canImport(AVFoundation)
