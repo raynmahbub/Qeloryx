@@ -6,6 +6,10 @@
 import QeloryxCore
 #endif
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 import SwiftUI
 
 public enum AstryxButtonStyle {
@@ -64,9 +68,11 @@ public struct AstryxButton: View {
     
     public var body: some View {
         Button(action: {
-            // Haptic feedback for premium feeling
+            // Haptic feedback for premium feeling (iOS only)
+            #if canImport(UIKit)
             let generator = UIImpactFeedbackGenerator(style: .medium)
             generator.impactOccurred()
+            #endif
             action()
         }) {
             HStack(spacing: AstryxSpacing.xs) {
