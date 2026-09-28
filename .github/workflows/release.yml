@@ -16,7 +16,11 @@ jobs:
     name: Validate tagged source
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Select supported Xcode toolchain
+        uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: '16.4'
       - name: Validate tag format
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -44,7 +48,7 @@ jobs:
           APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphonesimulator/Qeloryx.app"
           test -d "$APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" Qeloryx-simulator.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: release-simulator-app
           path: Qeloryx-simulator.zip
@@ -56,7 +60,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: release-simulator-app
       - name: Publish release

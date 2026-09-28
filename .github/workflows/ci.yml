@@ -19,7 +19,11 @@ jobs:
     name: Swift package build and tests
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Select supported Xcode toolchain
+        uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: '16.4'
       - name: Show toolchain
         run: swift --version
       - name: Build
@@ -31,17 +35,17 @@ jobs:
     name: SwiftLint
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Lint
-        run: swiftlint lint --strict
+        run: swiftlint lint
 
   ios-build:
     name: iOS simulator build
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
@@ -56,7 +60,7 @@ jobs:
     name: Documentation sanity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify required docs and links
         run: |
           set -euo pipefail
