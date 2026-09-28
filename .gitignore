@@ -1,0 +1,89 @@
+# QELORYX — .gitignore
+# Greenfield — Qeloryx Labs
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+*.xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+*.o
+*.d
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# SwiftLint
+.swiftlint.cache
+
+# Environment
+.env
+.env.local
+
+# Artwork cache (local dev)
+ArtworkCache/
+*.mp3
+*.flac
+*.wav
+*.m4a
+*.aac
+!**/Fixtures/*.mp3
+
+# Fonts (if not committed, download via script)
+# Fonts/SpaceGrotesk/*.ttf
+
+# ACC build artifacts
+Docs/ACC/build/
+
+# Coverage
+*.lcov
+coverage/

@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build QELORYX
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+      
+      - name: Install tools
+        run: |
+          brew install swiftlint || true
+          brew install xcodegen || true
+      
+      - name: Lint
+        run: |
+          if [ -f ".swiftlint.yml" ]; then
+            swiftlint lint --strict || echo "Lint warnings found"
+          fi
+      
+      - name: Generate Xcode project (if spec exists)
+        run: |
+          if [ -f "project.yml" ]; then
+            xcodegen generate
+          else
+            echo "No project.yml — using SPM only for foundation"
+          fi
+      
+      - name: Build SPM
+        run: swift build -c release
+      
+      - name: Performance Budget Check (placeholder)
+        run: |
+          echo "Performance budgets:"
+          echo "Cold Launch <1.5s"
+          echo "Warm Launch <0.6s"
+          echo "Search <50ms"
+          echo "Library Open <200ms"
+          echo "Queue Instant"
+          echo "Instrumentation to be added in Player milestone"
