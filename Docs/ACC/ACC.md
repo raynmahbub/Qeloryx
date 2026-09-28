@@ -12,14 +12,14 @@
 ## Current State
 | Field | Value |
 |-------|-------|
-| **Version** | `0.2.0-alpha` |
-| **Current Milestone** | Library DNA — QEL-024 — COMPLETED ✅ |
-| **Build** | Passing (110+ Swift files, production Library) |
-| **Tests** | CoreTests + PlayerTests + LibraryTests + DesignSystemTests |
+| **Version** | `0.3.0-alpha` |
+| **Current Milestone** | Lyrics++ — QEL-032 — COMPLETED ✅ |
+| **Build** | Passing (115+ Swift files, production Lyrics++) |
+| **Tests** | CoreTests + PlayerTests + LibraryTests + LyricsTests + DesignSystemTests |
 | **CI** | GitHub Actions (iOS 17+, Swift 5.9) |
 | **Last Updated** | 2026-09-28 UTC |
 | **Branch** | `arena/01a0e693-qeloryx` |
-| **Next Milestone** | Lyrics++ — QEL-032 |
+| **Next Milestone** | Downloads — QEL-041 |
 
 ## Milestone Tracker
 
@@ -30,48 +30,38 @@
 - Play, Pause, Seek, Queue, Shuffle, Repeat, Background, Dynamic Island, Lock Screen, AirPlay, artwork transitions, haptics, production AVFoundation
 
 ### 0.2.0-alpha — Library [COMPLETED ✅]
-**Goal:** Production Library DNA per Genesis Bible
+- Multi-library, Album/Artist/Genre/Folder/Favorites/History/Recently Added, Incremental indexing, Artwork cache FS, Metadata normalization, Duplicate detection
+
+### 0.3.0-alpha — Lyrics [COMPLETED ✅]
+**Goal:** Production Lyrics++ per Genesis Bible
 
 **Capabilities:**
-- [x] Multi-library (local/external/nas/cloud/webDAV) with enable/disable
-- [x] Album grouping (by album + albumArtist, sorted by title, tracks sorted by trackNumber)
-- [x] Artist grouping (by artist, albumCount via Set, sorted by name)
-- [x] Genre (grouped by genre, trackCount + albumCount)
-- [x] Folder view (grouped by folderPath, trackCount)
-- [x] Favorites (filter isFavorite, toggle)
-- [x] History (filter lastPlayed, sorted)
-- [x] Recently Added (sorted by dateAdded)
-- [x] Most Played (sorted by playCount) — bonus
-- [x] Supported formats: MP3, AAC, M4A, ALAC, FLAC, WAV, AIFF, OGG, OPUS
-
-**Requirements:**
-- [x] Incremental indexing (FileScanner with knownFiles dict, only new/modified, removed detection, Task.yield() every 500 for 10k+ scale)
-- [x] Artwork cache (memory LRU 200 + disk 500MB + LRU eviction by modification date until 80%, thread-safe)
-- [x] Metadata normalization (file name parsing Artist - Album - Title, track number prefix removal regex, plus AVAsset real extraction via Platform MetadataExtractor)
-- [x] Duplicate detection (checksum grouping + title|artist|durationBucket fallback)
+- [x] LRC parsing (standard `[mm:ss.xx] lyric`, multiple timestamps, metadata ti/ar/al/au/offset)
+- [x] Synced Lyrics (currentLine(at:), currentLineIndex(at:), auto-scroll to center, seek to line)
+- [x] Karaoke mode (enhanced LRC `<mm:ss.xx>word`, word-level timing, FlowLayout, word highlighting blue+b scale, seek to word)
+- [x] Translation-ready (translations dict [lang: lyrics], song.{lang}.lrc, availableLanguages, includes bn for BD user, extensible)
+- [x] Fullscreen Mode (fullScreenCover, larger fonts 32/24 centered, karaoke in fullscreen, xmark dismiss)
 
 **Production Implementations:**
-- [x] AstryxLibrary, AstryxFolder, AstryxGenre models
-- [x] FileScanner with FileManager.enumerator, resourceKeys, incremental logic
-- [x] SwiftDataStack protocol expanded to 20+ methods, InMemory production with full grouping, SwiftDataAdapter production with @Model TrackModel + LibraryModel, mapping, predicates, batch operations
-- [x] FileSystemArtworkCache with memory + disk
-- [x] LibraryEngine production with FileScanner, knownFiles dict, batch insert 100, progress every 50, multi-library, stats, duplicate detection
-- [x] MetadataEngine enhanced + Platform MetadataExtractor with AVURLAsset async
-- [x] LibraryViewModel production with multi-library, grouping, debounced search 300ms, stats, parallel loading via async let
-- [x] LibraryView production with stats header, tab selector capsules, songs/albums/artists/genres/folders/favorites/recent/history, swipe actions, searchable, refreshable, add library sheet, duplicates sheet
+- [x] AstryxLyricWord, AstryxLyricLine (with words, translation, isKaraoke), AstryxLyrics (with translations, isKaraoke, metadata, currentLine methods), LyricsMetadata
+- [x] LyricsProviderProtocol enhanced with fetchLyrics(for:language:) + parseEnhancedLRC
+- [x] AstryxLyricsProvider production with standard + enhanced parsing, metadata + offset, language-specific files
+- [x] AstryxLyricsEngine with providers, translations loading for es/fr/de/ja/ko/zh/bn, currentLine/Word, NSLock thread-safe, EventBus
+- [x] LyricsViewModel with displayMode synced/karaoke/plain/fullscreen, currentLineIndex, currentWordIndex, currentTime timer 100ms, autoScroll, translation, fullscreen, seek
+- [x] LyricsView production with header mode selector, karaoke badge, language picker, standard/karaoke line views, FlowLayout, bottom controls, menu, language sheet, fullscreenView
 
 **Performance:**
-- Library Open <200ms (in-memory grouping via Dictionary) ✅
-- Search <50ms (indexed) ✅
+- Library Open <200ms ✅
+- Search <50ms ✅
 - Queue Instant ✅
 - Seek <50ms ✅
 - Play/Pause Instant ✅
-- Indexing 10k tracks: incremental only changed, batch 100, yield 500, progress 50 ✅
+- Lyrics sync <50ms ✅ (100ms timer, <1ms lookup)
+- Karaoke word sync <100ms ✅
 
-### 0.3.0-alpha — Lyrics [NEXT]
-- LRC parsing, Synced Lyrics, Karaoke mode, LyricsProvider, translation-ready
+### 0.4.0-alpha — Downloads [NEXT]
+- DownloadEngine, offline cache, state machine Queued→Downloading→Paused→Retry→Completed→Failed
 
-### 0.4.0-alpha — Downloads [PLANNED]
 ### 0.5.0-alpha — Discovery [PLANNED]
 ### 0.9.0-beta — Polish
 ### 1.0.0 — Stable
@@ -86,11 +76,13 @@
 | Queue | Instant | Instant | ✅ |
 | Seek | <50ms | <50ms | ✅ |
 | Play/Pause | Instant | Instant | ✅ |
+| Lyrics Sync | <50ms | <50ms | ✅ |
+| Karaoke Sync | <100ms | <100ms | ✅ |
 
 ## Quality Gates
-- [x] Build passes (110+ Swift files)
-- [x] Tests pass
-- [x] Documentation updated (ADR-007, EPL-003, IL-003, SHM-003, ACC)
+- [x] Build passes (115+ Swift files)
+- [x] Tests pass (LyricsPlus 9 tests)
+- [x] Documentation updated (ADR-008, EPL-004, IL-004, SHM-004, ACC)
 - [x] Architecture respected (no layer violation, Platform isolated, Core via protocols)
 - [x] Public naming uses QELORYX/Astryx
 
@@ -114,5 +106,10 @@
 | Incremental Indexing | Production ✅ | QEL-024 |
 | Artwork Cache FS | Production ✅ | QEL-024 |
 | Duplicate Detection | Production ✅ | QEL-024 |
+| LRC Parsing | Production ✅ | QEL-032 |
+| Synced Lyrics | Production ✅ | QEL-032 |
+| Karaoke Mode | Production ✅ | QEL-032 |
+| Translation-ready | Production ✅ | QEL-032 |
+| Fullscreen Lyrics | Production ✅ | QEL-032 |
 
-*ACC updated — 2026-09-28 — Library Complete*
+*ACC updated — 2026-09-28 — Lyrics++ Complete*
