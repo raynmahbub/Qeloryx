@@ -133,11 +133,11 @@ final class DiscoveryTests: XCTestCase {
                 artist: "Artist \(i % 100)",
                 album: "Album \(i % 50)",
                 genre: ["Rock", "Pop", "Jazz", "Electronic", "Indie"][i % 5],
+                year: 2000 + (i % 24),
                 duration: 180,
                 fileURL: URL(fileURLWithPath: "/tmp/\(i).mp3"),
                 fileFormat: .mp3,
-                playCount: Int.random(in: 0...20),
-                year: 2000 + (i % 24)
+                playCount: Int.random(in: 0...20)
             ))
         }
         
