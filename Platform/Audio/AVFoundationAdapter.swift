@@ -182,10 +182,17 @@ extension AVFoundationAdapter {
         get { player?.allowsExternalPlayback ?? true }
         set { player?.allowsExternalPlayback = newValue }
     }
+    #if canImport(UIKit)
     public var usesExternalPlaybackWhileExternalScreenIsActive: Bool {
         get { player?.usesExternalPlaybackWhileExternalScreenIsActive ?? false }
         set { player?.usesExternalPlaybackWhileExternalScreenIsActive = newValue }
     }
+    #else
+    public var usesExternalPlaybackWhileExternalScreenIsActive: Bool {
+        get { false }
+        set {}
+    }
+    #endif
 }
 
 #else
