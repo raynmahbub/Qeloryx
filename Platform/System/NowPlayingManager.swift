@@ -4,11 +4,9 @@
 
 import Foundation
 
-#if canImport(MediaPlayer)
+#if canImport(MediaPlayer) && canImport(UIKit)
 import MediaPlayer
-#if canImport(UIKit)
 import UIKit
-#endif
 
 public protocol NowPlayingCommandHandler: AnyObject {
     func handlePlay() -> MPRemoteCommandHandlerStatus

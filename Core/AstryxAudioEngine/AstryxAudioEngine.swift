@@ -412,7 +412,7 @@ extension AstryxAudioEngine: AVFoundationAdapterDelegate {
     public func adapterDidChangeStatus(isReady: Bool) {}
 }
 
-#if canImport(MediaPlayer)
+#if canImport(MediaPlayer) && canImport(UIKit)
 import MediaPlayer
 
 private final class RemoteCommandHandler: NowPlayingCommandHandler {

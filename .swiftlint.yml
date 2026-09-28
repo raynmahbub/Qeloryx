@@ -62,18 +62,21 @@ custom_rules:
     regex: "import AVFoundation"
     message: "AVFoundation must be isolated in Platform layer"
     severity: warning
-    included: "Features/.*\\.swift"
+    included:
+      - 'Features/.*\.swift'
   
   no_swiftui_in_domain:
     name: "No SwiftUI in Domain/Core"
     regex: "import SwiftUI"
     message: "SwiftUI must stay in Presentation layer only"
     severity: error
-    included: "Core/.*\\.swift"
+    included:
+      - 'Core/.*\.swift'
 
   astrix_prefix:
     name: "Astryx prefix for components"
     regex: "struct (?!Astryx)[A-Z].*View:"
     message: "Reusable components should begin with Astryx"
     severity: warning
-    included: "DesignSystem/Components/.*\\.swift"
+    included:
+      - 'DesignSystem/Components/.*\.swift'
