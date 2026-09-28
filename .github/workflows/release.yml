@@ -93,21 +93,31 @@ jobs:
           seen = set()
           for log in Path(".").glob("*.log"):
               for line in log.read_text(errors="replace").splitlines():
-                  if re.search(r"\berror:", line, re.IGNORECASE):
+                  if ": error: " in line:
                       entry = f"{log.name}: {line.strip()}"
                       if entry not in seen:
                           seen.add(entry)
                           matches.append(entry)
-          for line in matches[:40]:
+          emitted = 0
+          for line in matches[:25]:
               escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(f"::error title=Release build diagnostic::{escaped}")
-          if not matches:
-              print("::error title=Release build failed::No error line was captured; tail of captured logs follows, full detail in the release-diagnostics artifact.")
-              for log in Path(".").glob("*.log"):
-                  tail = log.read_text(errors="replace").splitlines()[-15:]
-                  for line in tail:
-                      escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                      print(f"::error title={log.name} tail::{escaped}")
+              emitted += 1
+          # Always dump log tails. Timeout-killed steps carry no ': error:'
+          # line, and the verbose XCTest tail names the in-flight test case.
+          for log in sorted(Path(".").glob("*.log")):
+              if emitted >= 45:
+                  break
+              lines = log.read_text(errors="replace").splitlines()
+              tail_n = 25 if "test" in log.name else 10
+              for line in lines[-tail_n:]:
+                  if emitted >= 45:
+                      break
+                  escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(f"::error title={log.name} tail::{escaped}")
+                  emitted += 1
+          if emitted == 0:
+              print("::error title=Release build failed::No diagnostic lines captured; inspect the uploaded release-diagnostics artifact.")
           PY
       - name: Upload release diagnostics
         if: always()
