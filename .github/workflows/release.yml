@@ -179,8 +179,24 @@ jobs:
           rm -rf Payload
           mkdir -p Payload
           cp -R "$APP" Payload/
-          ditto -c -k --sequesterRsrc Payload Qeloryx.ipa
+          # --keepParent is required: without it, ditto places the *contents*
+          # of Payload/ at the archive root (Qeloryx.app/...) instead of
+          # Payload/Qeloryx.app/..., and sideloading tools reject the IPA
+          # with "No Payload directory found".
+          ditto -c -k --sequesterRsrc --keepParent Payload Qeloryx.ipa
           rm -rf Payload
+          # Ship nothing without verifying the exact layout sideloaders read:
+          # Payload/<App>.app/Info.plist plus an arm64 executable.
+          rm -rf verify-ipa
+          ditto -x -k Qeloryx.ipa verify-ipa
+          VERIFY_APP="verify-ipa/Payload/Qeloryx.app"
+          test -d "$VERIFY_APP"
+          EXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$VERIFY_APP/Info.plist")
+          test -n "$EXE" && test -f "$VERIFY_APP/$EXE"
+          lipo -info "$VERIFY_APP/$EXE" | tee verify-ipa.log
+          grep -q "arm64" verify-ipa.log
+          rm -rf verify-ipa verify-ipa.log
+          echo "IPA verified: Payload/Qeloryx.app with arm64 $EXE"
       - uses: actions/upload-artifact@v6
         with:
           name: release-ipa
