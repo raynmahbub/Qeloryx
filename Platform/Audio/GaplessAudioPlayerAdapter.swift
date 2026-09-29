@@ -20,7 +20,8 @@ import QeloryxCore
 import Foundation
 import AVFoundation
 
-public final class GaplessAudioPlayerAdapter: AudioPlayerAdapterProtocol, CrossfadeCapableAudioPlayer, @unchecked Sendable {
+public final class GaplessAudioPlayerAdapter: AudioPlayerAdapterProtocol,
+    CrossfadeCapableAudioPlayer, @unchecked Sendable {
 
     public weak var delegate: AVFoundationAdapterDelegate?
 
@@ -357,7 +358,8 @@ public final class GaplessAudioPlayerAdapter: AudioPlayerAdapterProtocol, Crossf
                     self.teardownStandbyLocked()
                     self.lock.unlock()
                 } else {
-                    self.delegate?.adapterDidFail(error: observed.error ?? NSError(domain: "GaplessAudioPlayerAdapter", code: -1))
+                    let failure = observed.error ?? NSError(domain: "GaplessAudioPlayerAdapter", code: -1)
+                    self.delegate?.adapterDidFail(error: failure)
                 }
             default:
                 break

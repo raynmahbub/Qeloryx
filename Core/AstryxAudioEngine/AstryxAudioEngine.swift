@@ -368,6 +368,10 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
             } else {
                 position = self.playbackState.position + 0.5
             }
+            // Read the queue before taking stateLock: the controller has its
+            // own lock, and holding stateLock across it would create a lock-
+            // ordering inversion the rest of the engine never takes.
+            let queueForTransitionCheck = self.currentQueue
             self.stateLock.lock()
             var newState: AstryxPlaybackState?
             var shouldPublish = false
@@ -380,7 +384,7 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
                         position: position,
                         duration: dur,
                         configuration: self.crossfadeConfiguration,
-                        queue: self.currentQueue
+                        queue: queueForTransitionCheck
                     )
                     if decision.shouldCrossfade {
                         self.transitionArmedTrackID = id

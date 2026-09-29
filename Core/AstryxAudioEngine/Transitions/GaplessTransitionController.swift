@@ -54,7 +54,8 @@ public struct GaplessTransitionController: Sendable {
         guard position.isFinite, duration.isFinite, position > 0, duration > 0 else { return deny(.invalidTiming) }
         guard !queue.shuffleEnabled else { return deny(.shuffledQueueUnsupported) }
         guard queue.repeatMode != .one else { return deny(.repeatOneUnsupported) }
-        guard duration > configuration.duration * GaplessTransitionController.minimumTrackLengthFactor else { return deny(.trackTooShort) }
+        let minimumViableLength = configuration.duration * GaplessTransitionController.minimumTrackLengthFactor
+        guard duration > minimumViableLength else { return deny(.trackTooShort) }
         guard queue.nextItem != nil else { return deny(.noNextItem) }
         let remaining = duration - position
         guard remaining <= configuration.duration else { return deny(.outsideFadeWindow) }
