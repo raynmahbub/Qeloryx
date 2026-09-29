@@ -13,6 +13,8 @@ Qeloryx is an iOS music-player project built around an offline-first library, pl
 - **App:** SwiftUI interface with AVFoundation-backed platform integration
 - **Packages:** `QeloryxCore`, `QeloryxDesignSystem`, and `QeloryxPlatform`
 - **Dependencies:** No external Swift package dependencies currently declared
+- **Roadmap:** `Docs/FEATURE_MATRIX.md` tracks every planned player capability and its sprint
+- **Attribution:** `THIRD-PARTY-NOTICES.md` records third-party reuse policy and components
 
 ## Features in development
 
