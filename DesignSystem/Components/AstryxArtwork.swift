@@ -2,7 +2,17 @@
 // AstryxArtwork.swift
 // Album artwork is primary visual anchor per spec
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 public struct AstryxArtwork: View {
     
@@ -15,21 +25,27 @@ public struct AstryxArtwork: View {
         self.size = size
         self.cornerRadius = cornerRadius
     }
-    
+
+    private static func makeImage(from data: Data) -> Image? {
+        #if canImport(UIKit)
+        guard let uiImage = UIImage(data: data) else { return nil }
+        return Image(uiImage: uiImage)
+        #elseif canImport(AppKit)
+        guard let nsImage = NSImage(data: data) else { return nil }
+        return Image(nsImage: nsImage)
+        #else
+        return nil
+        #endif
+    }
+
     public var body: some View {
         Group {
-            if let data = data, let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
+            if let data = data, let image = Self.makeImage(from: data) {
+                image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
-                // Placeholder with gradient
-                ZStack {
-                    AstryxColors.Gradients.aurora
-                    Image(systemName: "music.note")
-                        .font(.system(size: size * 0.4))
-                        .foregroundColor(.white.opacity(0.8))
-                }
+                placeholder
             }
         }
         .frame(width: size, height: size)
@@ -39,6 +55,16 @@ public struct AstryxArtwork: View {
                 .stroke(AstryxColors.Semantic.border, lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+    }
+
+    // Placeholder with gradient
+    private var placeholder: some View {
+        ZStack {
+            AstryxColors.Gradients.aurora
+            Image(systemName: "music.note")
+                .font(.system(size: size * 0.4))
+                .foregroundColor(.white.opacity(0.8))
+        }
     }
 }
 

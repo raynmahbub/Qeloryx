@@ -61,11 +61,15 @@ public struct RootView: View {
             AstryxPlayerView(viewModel: playerViewModel)
         }
         .task {
-            let _ = eventBus.subscribe { event in
+            let subscription = eventBus.subscribe { event in
                 if case .trackStarted(let trackID, _) = event {
                     Task { @MainActor in coordinator.currentTrackID = trackID }
                 }
             }
+            defer { subscription.cancel() }
+            // EventSubscription cancels on deinit, so keep it alive until
+            // SwiftUI cancels this task when the view disappears.
+            try? await Task.sleep(nanoseconds: .max)
         }
     }
 }

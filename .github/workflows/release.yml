@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate tagged source
+    name: Validate tag and build release assets
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -28,9 +28,119 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
       - name: Build Swift package
-        run: swift build -c release
-      - name: Test Swift package
-        run: swift test -c release
+        run: |
+          set -o pipefail
+          swift build -c release 2>&1 | tee swift-build-release.log
+      # Fan out XCTest classes into individual steps so a wedged class is
+      # visible directly in the step list (piped XCTest output is
+      # block-buffered and never reaches the log on a hard kill).
+      - name: Test AstryxAudioEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter AstryxAudioEngineTests 2>&1 | tee test-AstryxAudioEngineTests.log
+      - name: Test AstryxColorsTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter AstryxColorsTests 2>&1 | tee test-AstryxColorsTests.log
+      - name: Test CapabilityRegistryTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter CapabilityRegistryTests 2>&1 | tee test-CapabilityRegistryTests.log
+      - name: Test DiscoveryTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter DiscoveryTests 2>&1 | tee test-DiscoveryTests.log
+      # DownloadsTests wedged at the class level; fan its methods out so the
+      # exact hanging test shows up as the failed step.
+      - name: Test DownloadsTests.testCancel
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testCancel" 2>&1 | tee test-DownloadsTests-testCancel.log
+      - name: Test DownloadsTests.testConcurrentLimit
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testConcurrentLimit" 2>&1 | tee test-DownloadsTests-testConcurrentLimit.log
+      - name: Test DownloadsTests.testDownloadErrorRetryable
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testDownloadErrorRetryable" 2>&1 | tee test-DownloadsTests-testDownloadErrorRetryable.log
+      - name: Test DownloadsTests.testEnqueueAndAllTasks
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testEnqueueAndAllTasks" 2>&1 | tee test-DownloadsTests-testEnqueueAndAllTasks.log
+      - name: Test DownloadsTests.testFormattedProgressAndBytes
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testFormattedProgressAndBytes" 2>&1 | tee test-DownloadsTests-testFormattedProgressAndBytes.log
+      - name: Test DownloadsTests.testPauseAndResume
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testPauseAndResume" 2>&1 | tee test-DownloadsTests-testPauseAndResume.log
+      - name: Test DownloadsTests.testPriorityOrdering
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testPriorityOrdering" 2>&1 | tee test-DownloadsTests-testPriorityOrdering.log
+      - name: Test DownloadsTests.testRetryWithBackoff
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testRetryWithBackoff" 2>&1 | tee test-DownloadsTests-testRetryWithBackoff.log
+      - name: Test DownloadsTests.testStateMachineTransitions
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testStateMachineTransitions" 2>&1 | tee test-DownloadsTests-testStateMachineTransitions.log
+      - name: Test DownloadsTests.testStats
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter "DownloadsTests/testStats" 2>&1 | tee test-DownloadsTests-testStats.log
+      - name: Test EventBusTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter EventBusTests 2>&1 | tee test-EventBusTests.log
+      - name: Test LibraryDNATests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LibraryDNATests 2>&1 | tee test-LibraryDNATests.log
+      - name: Test LibraryEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LibraryEngineTests 2>&1 | tee test-LibraryEngineTests.log
+      - name: Test LyricsPlusTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LyricsPlusTests 2>&1 | tee test-LyricsPlusTests.log
+      - name: Test PlayerTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter PlayerTests 2>&1 | tee test-PlayerTests.log
+      - name: Test PolishTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter PolishTests 2>&1 | tee test-PolishTests.log
+      - name: Test SearchEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter SearchEngineTests 2>&1 | tee test-SearchEngineTests.log
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -41,7 +151,7 @@ jobs:
           xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Release -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild-simulator.log
       - name: Package app
         run: |
           set -euo pipefail
@@ -54,6 +164,90 @@ jobs:
           path: Qeloryx-simulator.zip
           if-no-files-found: error
           retention-days: 1
+      - name: Build unsigned device app (arm64)
+        run: |
+          set -o pipefail
+          xcodebuild -project Qeloryx.xcodeproj -scheme Qeloryx \
+            -destination 'generic/platform=iOS' \
+            -configuration Release -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild-device.log
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Qeloryx.app"
+          test -d "$APP"
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          # --keepParent is required: without it, ditto places the *contents*
+          # of Payload/ at the archive root (Qeloryx.app/...) instead of
+          # Payload/Qeloryx.app/..., and sideloading tools reject the IPA
+          # with "No Payload directory found".
+          ditto -c -k --sequesterRsrc --keepParent Payload Qeloryx.ipa
+          rm -rf Payload
+          # Ship nothing without verifying the exact layout sideloaders read:
+          # Payload/<App>.app/Info.plist plus an arm64 executable.
+          rm -rf verify-ipa
+          ditto -x -k Qeloryx.ipa verify-ipa
+          VERIFY_APP="verify-ipa/Payload/Qeloryx.app"
+          test -d "$VERIFY_APP"
+          EXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$VERIFY_APP/Info.plist")
+          test -n "$EXE" && test -f "$VERIFY_APP/$EXE"
+          lipo -info "$VERIFY_APP/$EXE" | tee verify-ipa.log
+          grep -q "arm64" verify-ipa.log
+          rm -rf verify-ipa verify-ipa.log
+          echo "IPA verified: Payload/Qeloryx.app with arm64 $EXE"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-ipa
+          path: Qeloryx.ipa
+          if-no-files-found: error
+          retention-days: 1
+      - name: Surface build errors in check annotations
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          matches = []
+          seen = set()
+          for log in Path(".").glob("*.log"):
+              for line in log.read_text(errors="replace").splitlines():
+                  if ": error: " in line:
+                      entry = f"{log.name}: {line.strip()}"
+                      if entry not in seen:
+                          seen.add(entry)
+                          matches.append(entry)
+          emitted = 0
+          for line in matches[:25]:
+              escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Release build diagnostic::{escaped}")
+              emitted += 1
+          # Always dump log tails. Timeout-killed steps carry no ': error:'
+          # line, and the verbose XCTest tail names the in-flight test case.
+          for log in sorted(Path(".").glob("*.log")):
+              if emitted >= 45:
+                  break
+              lines = log.read_text(errors="replace").splitlines()
+              tail_n = 25 if "test" in log.name else 10
+              for line in lines[-tail_n:]:
+                  if emitted >= 45:
+                      break
+                  escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(f"::error title={log.name} tail::{escaped}")
+                  emitted += 1
+          if emitted == 0:
+              print("::error title=Release build failed::No diagnostic lines captured; inspect the uploaded release-diagnostics artifact.")
+          PY
+      - name: Upload release diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-diagnostics-${{ github.sha }}
+          path: "*.log"
+          if-no-files-found: ignore
+          retention-days: 5
 
   publish:
     name: Publish GitHub prerelease/release
@@ -63,6 +257,9 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: release-simulator-app
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-ipa
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,7 +271,7 @@ jobs:
           else
             PRERELEASE=()
           fi
-          gh release create "$RELEASE_TAG" Qeloryx-simulator.zip \
+          gh release create "$RELEASE_TAG" Qeloryx.ipa Qeloryx-simulator.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "Qeloryx ${RELEASE_TAG#v}" \
             --generate-notes \

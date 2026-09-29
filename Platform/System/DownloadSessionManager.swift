@@ -2,6 +2,10 @@
 // DownloadSessionManager.swift
 // QEL-041 Downloads — Production URLSession with resume, background support, offline optimization
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 // MARK: - Download Session Manager — Platform Layer — Implements Core protocol

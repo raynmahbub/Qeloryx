@@ -4,18 +4,13 @@
 
 import Foundation
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 #if canImport(MediaPlayer) && canImport(UIKit)
 import MediaPlayer
 import UIKit
-
-public protocol NowPlayingCommandHandler: AnyObject {
-    func handlePlay() -> MPRemoteCommandHandlerStatus
-    func handlePause() -> MPRemoteCommandHandlerStatus
-    func handleNext() -> MPRemoteCommandHandlerStatus
-    func handlePrevious() -> MPRemoteCommandHandlerStatus
-    func handleSeek(to time: TimeInterval) -> MPRemoteCommandHandlerStatus
-    func handleTogglePlayPause() -> MPRemoteCommandHandlerStatus
-}
 
 public final class AstryxNowPlayingManager: @unchecked Sendable {
     
@@ -108,21 +103,11 @@ extension AstryxNowPlayingManager: NowPlayingManagerProtocol {}
 
 #else
 
-public protocol NowPlayingCommandHandler: AnyObject {
-    func handlePlay() -> Int
-    func handlePause() -> Int
-    func handleNext() -> Int
-    func handlePrevious() -> Int
-    func handleSeek(to time: TimeInterval) -> Int
-    func handleTogglePlayPause() -> Int
-}
-
 public final class AstryxNowPlayingManager: NowPlayingManagerProtocol, @unchecked Sendable {
     public static let shared = AstryxNowPlayingManager()
     public init() {}
     public func configure(handler: AnyObject?) {}
     public func configure(handler: NowPlayingCommandHandler? = nil) {}
-    public func updateNowPlaying(track: AstryxTrack?, isPlaying: Bool, position: TimeInterval, duration: TimeInterval?, artworkData: Data?) {}
     public func updateNowPlaying(track: AstryxTrack?, isPlaying: Bool, position: TimeInterval, duration: TimeInterval? = nil, artworkData: Data? = nil) {}
     public func updatePlaybackState(isPlaying: Bool, position: TimeInterval) {}
     public func clear() {}

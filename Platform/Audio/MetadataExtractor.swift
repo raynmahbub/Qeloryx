@@ -2,6 +2,10 @@
 // MetadataExtractor.swift
 // QEL-024 Library — Real AVAsset metadata extraction, isolated in Platform per architecture
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 #if canImport(AVFoundation)

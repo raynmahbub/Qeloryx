@@ -2,9 +2,13 @@
 // AudioSessionManager.swift
 // QEL-012 Player — Real AVAudioSession handling
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
-#if canImport(AVFoundation)
+#if canImport(AVFoundation) && canImport(UIKit)
 import AVFoundation
 
 public final class AstryxAudioSessionManager: AudioSessionManagerProtocol, @unchecked Sendable {

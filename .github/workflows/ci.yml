@@ -27,9 +27,121 @@ jobs:
       - name: Show toolchain
         run: swift --version
       - name: Build
-        run: swift build -v 2>&1 | tee swift-build.log
-      - name: Test
-        run: swift test --enable-code-coverage 2>&1 | tee swift-test.log
+        run: |
+          set -o pipefail
+          swift build -v 2>&1 | tee swift-build.log
+      # Test classes run one step each with their own step-level timeouts —
+      # the whole suite in a single `swift test` invocation has wedged more
+      # than once without naming the hanging test (piped XCTest output is
+      # block-buffered, so a hard kill loses the tail). This mirrors the
+      # Release workflow's fan-out.
+      - name: Test AstryxAudioEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter AstryxAudioEngineTests 2>&1 | tee test-AstryxAudioEngineTests.log
+      - name: Test AstryxColorsTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter AstryxColorsTests 2>&1 | tee test-AstryxColorsTests.log
+      - name: Test CapabilityRegistryTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter CapabilityRegistryTests 2>&1 | tee test-CapabilityRegistryTests.log
+      - name: Test DiscoveryTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter DiscoveryTests 2>&1 | tee test-DiscoveryTests.log
+      # DownloadsTests has wedged at the class level before; per-method
+      # steps keep a hanging case visible in the step list.
+      - name: Test DownloadsTests.testCancel
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testCancel 2>&1 | tee test-DownloadsTests-testCancel.log
+      - name: Test DownloadsTests.testConcurrentLimit
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testConcurrentLimit 2>&1 | tee test-DownloadsTests-testConcurrentLimit.log
+      - name: Test DownloadsTests.testDownloadErrorRetryable
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testDownloadErrorRetryable 2>&1 | tee test-DownloadsTests-testDownloadErrorRetryable.log
+      - name: Test DownloadsTests.testEnqueueAndAllTasks
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testEnqueueAndAllTasks 2>&1 | tee test-DownloadsTests-testEnqueueAndAllTasks.log
+      - name: Test DownloadsTests.testFormattedProgressAndBytes
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testFormattedProgressAndBytes 2>&1 | tee test-DownloadsTests-testFormattedProgressAndBytes.log
+      - name: Test DownloadsTests.testPauseAndResume
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testPauseAndResume 2>&1 | tee test-DownloadsTests-testPauseAndResume.log
+      - name: Test DownloadsTests.testPriorityOrdering
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testPriorityOrdering 2>&1 | tee test-DownloadsTests-testPriorityOrdering.log
+      - name: Test DownloadsTests.testRetryWithBackoff
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testRetryWithBackoff 2>&1 | tee test-DownloadsTests-testRetryWithBackoff.log
+      - name: Test DownloadsTests.testStateMachineTransitions
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testStateMachineTransitions 2>&1 | tee test-DownloadsTests-testStateMachineTransitions.log
+      - name: Test DownloadsTests.testStats
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testStats 2>&1 | tee test-DownloadsTests-testStats.log
+      - name: Test EventBusTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter EventBusTests 2>&1 | tee test-EventBusTests.log
+      - name: Test LibraryDNATests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LibraryDNATests 2>&1 | tee test-LibraryDNATests.log
+      - name: Test LibraryEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LibraryEngineTests 2>&1 | tee test-LibraryEngineTests.log
+      - name: Test LyricsPlusTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter LyricsPlusTests 2>&1 | tee test-LyricsPlusTests.log
+      - name: Test PlayerTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter PlayerTests 2>&1 | tee test-PlayerTests.log
+      - name: Test PolishTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter PolishTests 2>&1 | tee test-PolishTests.log
+      - name: Test SearchEngineTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter SearchEngineTests 2>&1 | tee test-SearchEngineTests.log
       - name: Upload Swift diagnostics
         if: always()
         uses: actions/upload-artifact@v6
@@ -37,7 +149,7 @@ jobs:
           name: swift-diagnostics-${{ github.sha }}
           path: |
             swift-build.log
-            swift-test.log
+            test-*.log
           if-no-files-found: ignore
           retention-days: 5
 
@@ -49,7 +161,9 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Lint
-        run: swiftlint lint 2>&1 | tee swiftlint.log
+        run: |
+          set -o pipefail
+          swiftlint lint 2>&1 | tee swiftlint.log
       - name: Upload SwiftLint diagnostics
         if: always()
         uses: actions/upload-artifact@v6

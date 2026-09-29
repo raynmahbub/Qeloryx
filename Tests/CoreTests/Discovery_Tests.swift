@@ -16,9 +16,9 @@ final class DiscoveryTests: XCTestCase {
     
     func testTasteProfileGeneration() async {
         let tracks = [
-            AstryxTrack(title: "Song 1", artist: "Artist A", album: "Album X", genre: "Rock", duration: 180, fileURL: URL(fileURLWithPath: "/tmp/1.mp3"), fileFormat: .mp3, playCount: 10, isFavorite: true, year: 2020),
-            AstryxTrack(title: "Song 2", artist: "Artist A", album: "Album X", genre: "Rock", duration: 200, fileURL: URL(fileURLWithPath: "/tmp/2.mp3"), fileFormat: .mp3, playCount: 5, year: 2021),
-            AstryxTrack(title: "Song 3", artist: "Artist B", album: "Album Y", genre: "Jazz", duration: 210, fileURL: URL(fileURLWithPath: "/tmp/3.mp3"), fileFormat: .mp3, playCount: 3, year: 2019)
+            AstryxTrack(title: "Song 1", artist: "Artist A", album: "Album X", genre: "Rock", year: 2020, duration: 180, fileURL: URL(fileURLWithPath: "/tmp/1.mp3"), fileFormat: .mp3, playCount: 10, isFavorite: true),
+            AstryxTrack(title: "Song 2", artist: "Artist A", album: "Album X", genre: "Rock", year: 2021, duration: 200, fileURL: URL(fileURLWithPath: "/tmp/2.mp3"), fileFormat: .mp3, playCount: 5),
+            AstryxTrack(title: "Song 3", artist: "Artist B", album: "Album Y", genre: "Jazz", year: 2019, duration: 210, fileURL: URL(fileURLWithPath: "/tmp/3.mp3"), fileFormat: .mp3, playCount: 3)
         ]
         
         let profile = await tasteEngine.generateProfile(from: tracks)
@@ -133,11 +133,11 @@ final class DiscoveryTests: XCTestCase {
                 artist: "Artist \(i % 100)",
                 album: "Album \(i % 50)",
                 genre: ["Rock", "Pop", "Jazz", "Electronic", "Indie"][i % 5],
+                year: 2000 + (i % 24),
                 duration: 180,
                 fileURL: URL(fileURLWithPath: "/tmp/\(i).mp3"),
                 fileFormat: .mp3,
-                playCount: Int.random(in: 0...20),
-                year: 2000 + (i % 24)
+                playCount: Int.random(in: 0...20)
             ))
         }
         

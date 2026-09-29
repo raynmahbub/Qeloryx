@@ -198,7 +198,9 @@ public final class AstryxLyricsProvider: LyricsProviderProtocol {
     // MARK: - Standard LRC Parsing — [mm:ss.xx] lyric text
     
     public func parseLRC(_ lrcString: String, trackID: String) -> AstryxLyrics {
-        let pattern = #"\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)"#
+        // Capture text lazily up to the next timestamp or end of line so
+        // repeated-timestamp lines ([00:12.00][00:15.00]text) match every tag.
+        let pattern = #"\[(\d{2}):(\d{2})\.(\d{2,3})\](.*?)(?=\[\d{2}:|$)"#
         let regex = try? NSRegularExpression(pattern: pattern)
         let metadataPattern = #"\[(\w+):(.*)\]"#
         let metadataRegex = try? NSRegularExpression(pattern: metadataPattern)
@@ -248,12 +250,15 @@ public final class AstryxLyricsProvider: LyricsProviderProtocol {
             
             guard !matches.isEmpty else { return }
             
-            // Extract text from last match (after all timestamps)
-            var lyricText = trimmed
+            // Extract text from the last timestamp match carrying non-empty text
+            var lyricText = ""
             for match in matches.reversed() {
                 if let textRange = Range(match.range(at: 4), in: trimmed) {
-                    lyricText = String(trimmed[textRange]).trimmingCharacters(in: .whitespaces)
-                    break
+                    let candidate = String(trimmed[textRange]).trimmingCharacters(in: .whitespaces)
+                    if !candidate.isEmpty {
+                        lyricText = candidate
+                        break
+                    }
                 }
             }
             

@@ -5,6 +5,16 @@ All notable changes to QELORYX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed — Build integrity
+- **SPM package compile failure** — `NowPlayingCommandHandler` was defined in the Platform target while `Core/AstryxAudioEngine` conformed to it; Core does not depend on Platform, so `swift build -c release` failed (`cannot find type 'NowPlayingCommandHandler' in scope`). The protocol now lives in `Core/Shared/Protocols` beside the other platform-facing abstractions, with the same dual-variant signatures (MPRemoteCommandHandlerStatus on iOS, Int elsewhere).
+- **Missing SPM module imports** — added `#if canImport(QeloryxCore)\nimport QeloryxCore` to all `Platform` and `DesignSystem` sources so the multi-module SPM build resolves Core types while the single-target xcodegen build treats the shim as a no-op.
+- **Masked CI failures** — `swift build`, `swift test`, and `swiftlint` in `ci.yml` piped through `tee` without `pipefail`, so broken compiles reported success. `set -o pipefail` added. Release workflow build steps now also log to `*.log` files and surface compiler errors as check annotations plus an always-uploaded diagnostics artifact.
+
+### Added — Release automation
+- **Direct IPA release** — `release.yml` now also builds an unsigned arm64 device app (`generic/platform=iOS`, Release, `CODE_SIGNING_ALLOWED=NO`) and packages it as `Qeloryx.ipa` (standard `Payload/Qeloryx.app` layout). Tag pushes (`v*`) publish a GitHub Release/prerelease with both `Qeloryx.ipa` (sideloadable via AltStore/SideStore/Esign/TrollStore after local signing) and the existing `Qeloryx-simulator.zip`. Docs (`Docs/RELEASE_FLOW.md`, `README.md`) and `Scripts/release.sh` output updated to match.
+
 ## [1.0.0] — 2026-09-28 — Stable — App Store Ready ✅
 
 ### Added — All Milestones Production

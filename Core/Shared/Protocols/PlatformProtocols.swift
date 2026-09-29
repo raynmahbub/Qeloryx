@@ -4,6 +4,10 @@
 
 import Foundation
 
+#if canImport(MediaPlayer) && canImport(UIKit)
+import MediaPlayer
+#endif
+
 // MARK: - Haptic Type (Core)
 
 public enum HapticType: Sendable {
@@ -54,6 +58,32 @@ public protocol NowPlayingManagerProtocol: AnyObject, Sendable {
     func updatePlaybackState(isPlaying: Bool, position: TimeInterval)
     func clear()
 }
+
+// MARK: - Now Playing Command Handler
+// Owned by Core so engine-side command handlers compile in every build
+// variant (SPM multi-module and single-target app). Platform's
+// AstryxNowPlayingManager consumes this protocol; the return type must
+// stay MPRemoteCommandHandlerStatus-compatible on iOS.
+
+#if canImport(MediaPlayer) && canImport(UIKit)
+public protocol NowPlayingCommandHandler: AnyObject {
+    func handlePlay() -> MPRemoteCommandHandlerStatus
+    func handlePause() -> MPRemoteCommandHandlerStatus
+    func handleNext() -> MPRemoteCommandHandlerStatus
+    func handlePrevious() -> MPRemoteCommandHandlerStatus
+    func handleSeek(to time: TimeInterval) -> MPRemoteCommandHandlerStatus
+    func handleTogglePlayPause() -> MPRemoteCommandHandlerStatus
+}
+#else
+public protocol NowPlayingCommandHandler: AnyObject {
+    func handlePlay() -> Int
+    func handlePause() -> Int
+    func handleNext() -> Int
+    func handlePrevious() -> Int
+    func handleSeek(to time: TimeInterval) -> Int
+    func handleTogglePlayPause() -> Int
+}
+#endif
 
 // MARK: - Live Activity Protocol
 
