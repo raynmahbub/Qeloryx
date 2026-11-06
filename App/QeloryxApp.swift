@@ -36,7 +36,10 @@ struct QeloryxApp: App {
         AstryxLaunchOptimizer.shared.optimizeColdLaunch()
         
         let eventBus = AstryxEventBus.shared
-        let avAdapter: any AudioPlayerAdapterProtocol = AVFoundationAdapter()
+        // Dual-deck gapless adapter: identical to the classic adapter for
+        // hard transitions, and honors `.setCrossfade` by pre-staging the
+        // next track on the standby deck for seamless fades.
+        let avAdapter: any AudioPlayerAdapterProtocol = GaplessAudioPlayerAdapter()
         let sessionManager: any AudioSessionManagerProtocol = AstryxAudioSessionManager(eventBus: eventBus)
         let nowPlaying: any NowPlayingManagerProtocol = AstryxNowPlayingManager.shared
         let liveActivity: any LiveActivityManagerProtocol = AstryxLiveActivityManager.shared

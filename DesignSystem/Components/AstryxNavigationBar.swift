@@ -1,6 +1,10 @@
 // QELORYX — DesignSystem
 // AstryxNavigationBar.swift
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxNavigationBar: View {

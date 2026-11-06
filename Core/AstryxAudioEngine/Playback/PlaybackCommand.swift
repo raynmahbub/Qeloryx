@@ -17,4 +17,8 @@ public enum AstryxPlaybackCommand: Sendable, Equatable {
     case setShuffle(_ enabled: Bool)
     case setRepeat(_ mode: AstryxRepeatMode)
     case setVolume(_ volume: Float)
+    /// Enables or tunes gapless crossfades. `.disabled` (duration ≤ 0)
+    /// restores the classic hard transition. Requires an adapter that
+    /// conforms to `CrossfadeCapableAudioPlayer`; otherwise this is a no-op.
+    case setCrossfade(_ configuration: CrossfadeConfiguration)
 }

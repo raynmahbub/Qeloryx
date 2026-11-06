@@ -2,6 +2,10 @@
 // LaunchOptimizer.swift
 // QEL-051 Polish — Production cold/warm launch optimization
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 public final class AstryxLaunchOptimizer: @unchecked Sendable {

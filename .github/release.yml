@@ -1,0 +1,32 @@
+# GitHub's built-in release-notes configuration.
+# `gh release create --generate-notes` reads this file and sorts merged PRs
+# into the categories below (a PR takes the first category any of its labels
+# match; an unlabeled PR lands in "Other Changes").
+
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - ignore-for-release
+  categories:
+    - title: 🚀 New Features
+      labels:
+        - enhancement
+        - feature
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: 🛠 Build, CI & Maintenance
+      labels:
+        - build
+        - ci
+        - chore
+        - maintenance
+    - title: 📝 Documentation
+      labels:
+        - docs
+        - documentation
+    - title: ⚙️ Other Changes
+      labels:
+        - "*"

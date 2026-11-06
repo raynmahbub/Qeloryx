@@ -1,6 +1,10 @@
 // QELORYX — DesignSystem
 // AstryxSheet.swift
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxSheet<Content: View>: View {

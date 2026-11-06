@@ -2,6 +2,10 @@
 // AstryxTheme.swift
 // Composition of Midnight Aurora theme
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 // MARK: - AstryxTheme

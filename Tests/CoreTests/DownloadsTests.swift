@@ -131,11 +131,12 @@ final class DownloadsTests: XCTestCase {
     }
     
     func testStats() async {
+        // Deterministic: the engine inserts tasks as-is and processQueue
+        // immediately promotes queued entries to downloading, so only
+        // terminal states can be asserted without racing the engine.
         let tasks = [
-            AstryxDownloadTask(sourceURL: URL(string: "https://example.com/1.mp3")!, destinationURL: URL(fileURLWithPath: "/tmp/1.mp3"), state: .queued),
-            AstryxDownloadTask(sourceURL: URL(string: "https://example.com/2.mp3")!, destinationURL: URL(fileURLWithPath: "/tmp/2.mp3"), state: .downloading),
-            AstryxDownloadTask(sourceURL: URL(string: "https://example.com/3.mp3")!, destinationURL: URL(fileURLWithPath: "/tmp/3.mp3"), state: .completed),
-            AstryxDownloadTask(sourceURL: URL(string: "https://example.com/4.mp3")!, destinationURL: URL(fileURLWithPath: "/tmp/4.mp3"), state: .failed)
+            AstryxDownloadTask(sourceURL: URL(string: "https://example.com/1.mp3")!, destinationURL: URL(fileURLWithPath: "/tmp/1.mp3"), state: .completed),
+            AstryxDownloadTask(sourceURL: URL(string: "https://example.com/2.mp3")!, destinationURL: URL(fileURLWithPath: "/tmp/2.mp3"), state: .failed, retryCount: 0, maxRetries: 3, error: .networkError("test"))
         ]
         
         for task in tasks {
@@ -143,9 +144,9 @@ final class DownloadsTests: XCTestCase {
         }
         
         let stats = await engine.stats()
-        XCTAssertEqual(stats.total, 4)
-        XCTAssertEqual(stats.queued, 1)
-        XCTAssertEqual(stats.downloading, 1)
+        XCTAssertEqual(stats.total, 2)
+        XCTAssertEqual(stats.queued, 0)
+        XCTAssertEqual(stats.downloading, 0)
         XCTAssertEqual(stats.completed, 1)
         XCTAssertEqual(stats.failed, 1)
     }

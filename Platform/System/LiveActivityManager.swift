@@ -2,6 +2,10 @@
 // LiveActivityManager.swift
 // QEL-012 Player — Dynamic Island + Live Activities
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 #if canImport(ActivityKit)

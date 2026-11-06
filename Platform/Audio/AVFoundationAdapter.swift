@@ -3,6 +3,10 @@
 // QEL-012 Player Milestone — Production AVFoundation implementation
 // Isolates AVFoundation — only place where AVFoundation is imported per architecture rules
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 #if canImport(AVFoundation)
@@ -166,18 +170,29 @@ public final class AVFoundationAdapter: AudioPlayerAdapterProtocol, @unchecked S
 
 extension AVFoundationAdapter {
     public var isAirPlayActive: Bool {
+        #if canImport(UIKit)
         let session = AVAudioSession.sharedInstance()
         let outputs = session.currentRoute.outputs
         return outputs.contains { $0.portType == .airPlay }
+        #else
+        return false
+        #endif
     }
     public var allowsExternalPlayback: Bool {
         get { player?.allowsExternalPlayback ?? true }
         set { player?.allowsExternalPlayback = newValue }
     }
+    #if canImport(UIKit)
     public var usesExternalPlaybackWhileExternalScreenIsActive: Bool {
         get { player?.usesExternalPlaybackWhileExternalScreenIsActive ?? false }
         set { player?.usesExternalPlaybackWhileExternalScreenIsActive = newValue }
     }
+    #else
+    public var usesExternalPlaybackWhileExternalScreenIsActive: Bool {
+        get { false }
+        set {}
+    }
+    #endif
 }
 
 #else
