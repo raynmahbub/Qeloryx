@@ -3,6 +3,7 @@
 // QEL-024 Library DNA — Production UI with multi-library, grouping, folder view
 
 import SwiftUI
+import UIKit
 
 public struct LibraryView: View {
     
@@ -10,6 +11,10 @@ public struct LibraryView: View {
     @State private var showAddLibrary = false
     @State private var showDuplicates = false
     @State private var duplicateGroups: [[AstryxTrack]] = []
+    @State private var showSmartPlaylist = false
+    @State private var smartPlaylistTracks: [AstryxTrack] = []
+    @State private var showM3UExport = false
+    @State private var exportedM3U = ""
     
     public init(viewModel: LibraryViewModel = LibraryViewModel()) {
         _viewModel = StateObject(wrappedValue: viewModel)
