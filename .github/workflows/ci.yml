@@ -142,6 +142,33 @@ jobs:
         run: |
           set -o pipefail
           swift test -c release --filter SearchEngineTests 2>&1 | tee test-SearchEngineTests.log
+      - name: Test OSSFeaturesTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter OSSFeaturesTests 2>&1 | tee test-OSSFeaturesTests.log
+      - name: Test OSSIntegrationTests
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          swift test -c release --filter OSSIntegrationTests 2>&1 | tee test-OSSIntegrationTests.log
+      - name: Surface compiler/test errors as check annotations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          logs = sorted(Path('.').glob('swift-build.log')) + sorted(Path('.').glob('test-*.log'))
+          count = 0
+          for log in logs:
+              for line in log.read_text(errors='replace').splitlines():
+                  if re.search(r'\berror:', line) and count < 40:
+                      escaped = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                      print(f"::error title=Swift diagnostic ({log.name})::{escaped}")
+                      count += 1
+          if count == 0:
+              print("::error title=Swift package job failed::No 'error:' line found in logs; inspect the uploaded diagnostics artifact.")
+          PY
       - name: Upload Swift diagnostics
         if: always()
         uses: actions/upload-artifact@v6
