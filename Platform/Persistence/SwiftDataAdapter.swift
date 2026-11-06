@@ -2,6 +2,10 @@
 // SwiftDataAdapter.swift
 // QEL-024 Library — Production SwiftData with ModelContainer, ModelContext, relationships
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 
 #if canImport(SwiftData)

@@ -1,6 +1,10 @@
 // QELORYX — DesignSystem
 // AstryxTypography.swift
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 // MARK: - AstryxTypography

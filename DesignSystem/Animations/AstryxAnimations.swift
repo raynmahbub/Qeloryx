@@ -2,6 +2,10 @@
 // AstryxAnimations.swift
 // QEL-051 Polish — Production animations, artwork transitions, haptics integration
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxAnimations {

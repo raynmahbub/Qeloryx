@@ -2,7 +2,7 @@
 // AstryxColorsTests.swift
 
 import XCTest
-@testable import QeloryxCore
+@testable import QeloryxDesignSystem
 import SwiftUI
 
 final class AstryxColorsTests: XCTestCase {

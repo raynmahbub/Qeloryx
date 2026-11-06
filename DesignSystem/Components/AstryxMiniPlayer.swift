@@ -2,6 +2,10 @@
 // AstryxMiniPlayer.swift
 // Persistent bottom player per spec
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxMiniPlayer: View {

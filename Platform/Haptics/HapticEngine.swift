@@ -2,6 +2,10 @@
 // HapticEngine.swift
 // QEL-051 Polish — Production haptics with Astryx feedback, QEL-012 + QEL-051 enhanced
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import Foundation
 #if canImport(UIKit)
 import UIKit

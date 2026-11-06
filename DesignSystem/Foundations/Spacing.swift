@@ -2,6 +2,10 @@
 // Spacing.swift
 // 4pt grid
 
+#if canImport(QeloryxCore)
+import QeloryxCore
+#endif
+
 import SwiftUI
 
 public struct AstryxSpacing {

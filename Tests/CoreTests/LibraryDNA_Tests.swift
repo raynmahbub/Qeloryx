@@ -47,9 +47,9 @@ final class LibraryDNATests: XCTestCase {
     
     func testAlbumGrouping() async throws {
         let tracks = [
-            AstryxTrack(title: "Song 1", artist: "Artist A", album: "Album X", duration: 180, fileURL: URL(fileURLWithPath: "/tmp/1.mp3"), fileFormat: .mp3, trackNumber: 1),
-            AstryxTrack(title: "Song 2", artist: "Artist A", album: "Album X", duration: 200, fileURL: URL(fileURLWithPath: "/tmp/2.mp3"), fileFormat: .mp3, trackNumber: 2),
-            AstryxTrack(title: "Song 3", artist: "Artist B", album: "Album Y", duration: 210, fileURL: URL(fileURLWithPath: "/tmp/3.mp3"), fileFormat: .mp3, trackNumber: 1)
+            AstryxTrack(title: "Song 1", artist: "Artist A", album: "Album X", trackNumber: 1, duration: 180, fileURL: URL(fileURLWithPath: "/tmp/1.mp3"), fileFormat: .mp3),
+            AstryxTrack(title: "Song 2", artist: "Artist A", album: "Album X", trackNumber: 2, duration: 200, fileURL: URL(fileURLWithPath: "/tmp/2.mp3"), fileFormat: .mp3),
+            AstryxTrack(title: "Song 3", artist: "Artist B", album: "Album Y", trackNumber: 1, duration: 210, fileURL: URL(fileURLWithPath: "/tmp/3.mp3"), fileFormat: .mp3)
         ]
         try await storage.insertTracks(tracks)
         

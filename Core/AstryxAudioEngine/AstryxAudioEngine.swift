@@ -29,6 +29,11 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
     private var positionTimer: Timer?
     private var currentTrackCache: AstryxTrack?
     private var subscriptionStore = EventSubscriptionStore()
+    private var crossfadeConfiguration = CrossfadeConfiguration.disabled
+    private let transitionController = GaplessTransitionController()
+    /// Track ID whose crossfade is already committed, so the position timer
+    /// arms exactly once per track and never races itself.
+    private var transitionArmedTrackID: String?
     
     public init(
         queueController: any QueueControllerProtocol = AstryxQueueController(),
@@ -93,6 +98,8 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
             hapticEngine.trigger(.selection)
         case .setVolume(let volume):
             try await setVolume(volume)
+        case .setCrossfade(let configuration):
+            crossfadeConfiguration = configuration
         }
     }
     
@@ -173,6 +180,7 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
             #endif
         }
         currentTrackCache = track
+        transitionArmedTrackID = nil
         stateLock.lock()
         _playbackState = .playing(trackID: trackID, position: 0, duration: duration)
         let state = _playbackState
@@ -200,6 +208,7 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
     
     private func stop() async throws {
         avAdapter.stop()
+        transitionArmedTrackID = nil
         stateLock.lock()
         _playbackState = .stopped
         let state = _playbackState
@@ -278,6 +287,52 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
             try await startPlayback(trackID: trackIDs[startIndex])
         }
     }
+
+    /// Executes a committed crossfade: advances the queue, stages the next
+    /// track on the adapter's idle deck, and swaps decks over the configured
+    /// fade. Any staging failure disarms the transition so the incoming
+    /// natural track-end drives the classic hard `next()` instead.
+    private func performCrossfade(fromTrackID: String) async {
+        guard let crossfader = avAdapter as? CrossfadeCapableAudioPlayer else {
+            transitionArmedTrackID = nil
+            return
+        }
+        guard crossfadeConfiguration.isEnabled else {
+            transitionArmedTrackID = nil
+            return
+        }
+        guard let nextItem = await queueController.next() else {
+            transitionArmedTrackID = nil
+            return
+        }
+        var track: AstryxTrack?
+        if let engine = libraryEngine {
+            track = try? await engine.fetchTrack(id: nextItem.trackID)
+        }
+        let fileURL = track?.fileURL ?? URL(fileURLWithPath: "/tmp/\(nextItem.trackID).mp3")
+        let duration = track?.duration ?? 180
+        do {
+            try crossfader.prepareNext(url: fileURL)
+        } catch {
+            transitionArmedTrackID = nil
+            return
+        }
+        crossfader.activatePreparedNext(fadeDuration: crossfadeConfiguration.duration, curve: crossfadeConfiguration.curve)
+        currentTrackCache = track
+        stateLock.lock()
+        _playbackState = .playing(trackID: nextItem.trackID, position: 0, duration: duration)
+        let state = _playbackState
+        stateLock.unlock()
+        hapticEngine.trigger(.selection)
+        nowPlayingManager.updateNowPlaying(track: track, isPlaying: true, position: 0, duration: duration, artworkData: track?.artworkData)
+        liveActivityManager.updateLiveActivity(track: track, isPlaying: true, position: 0, duration: duration)
+        let queueID = currentQueue.id
+        eventBus.publish(.trackEnded(trackID: fromTrackID, reason: .natural))
+        eventBus.publish(.trackStarted(trackID: nextItem.trackID, queueID: queueID))
+        eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
+        try? await libraryEngine?.recordPlay(trackID: nextItem.trackID)
+        preloadNext()
+    }
     
     public func setVolume(_ volume: Float) async throws {
         avAdapter.setVolume(volume)
@@ -313,11 +368,31 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
             } else {
                 position = self.playbackState.position + 0.5
             }
+            // Read the queue before taking stateLock: the controller has its
+            // own lock, and holding stateLock across it would create a lock-
+            // ordering inversion the rest of the engine never takes.
+            let queueForTransitionCheck = self.currentQueue
             self.stateLock.lock()
             var newState: AstryxPlaybackState?
             var shouldPublish = false
             switch self._playbackState {
             case .playing(let id, _, let dur):
+                if self.transitionArmedTrackID != id,
+                   self.crossfadeConfiguration.isEnabled,
+                   self.avAdapter is CrossfadeCapableAudioPlayer {
+                    let decision = self.transitionController.evaluate(
+                        position: position,
+                        duration: dur,
+                        configuration: self.crossfadeConfiguration,
+                        queue: queueForTransitionCheck
+                    )
+                    if decision.shouldCrossfade {
+                        self.transitionArmedTrackID = id
+                        self.stateLock.unlock()
+                        Task { await self.performCrossfade(fromTrackID: id) }
+                        return
+                    }
+                }
                 if position >= dur && dur > 0 {
                     self.stateLock.unlock()
                     Task { try? await self.next() }
