@@ -21,4 +21,4 @@ fi
 
 xcodegen generate
 swift build
-printf '\nEnvironment ready. Run `swift test` and `Scripts/lint.sh` before submitting changes.\n'
+printf '\nEnvironment ready. Run `swift test` and `.github/scripts/lint.sh` before submitting changes.\n'

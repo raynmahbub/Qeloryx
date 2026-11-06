@@ -1,5 +1,5 @@
 // QELORYX — Tests
-// LyricsPlus_Tests.swift
+// LyricsPlusTests.swift
 // QEL-032 Lyrics++ — LRC, Synced, Karaoke, Translation-ready, Fullscreen
 
 import XCTest

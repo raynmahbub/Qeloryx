@@ -101,20 +101,20 @@ show_sequence
 # If no args, show help and interactive mode
 if [ $# -eq 0 ]; then
     echo -e "${YELLOW}=== Usage — Official Sequence ===${NC}"
-    echo "  ./Scripts/release.sh dev              — Release dev build v1.0.0-dev.1 (1/5)"
-    echo "  ./Scripts/release.sh alpha            — Release alpha build v1.0.0-alpha.1 (2/5)"
-    echo "  ./Scripts/release.sh beta             — Release beta build v1.0.0-beta.1 (3/5)"
-    echo "  ./Scripts/release.sh rc               — Release RC build v1.0.0-rc.1 (4/5)"
-    echo "  ./Scripts/release.sh stable           — Release stable build v1.0.0 (5/5)"
-    echo "  ./Scripts/release.sh dev 1.0.0-dev.2   — Release specific version"
-    echo "  ./Scripts/release.sh --help           — Show help"
+    echo "  ./.github/scripts/release.sh dev              — Release dev build v1.0.0-dev.1 (1/5)"
+    echo "  ./.github/scripts/release.sh alpha            — Release alpha build v1.0.0-alpha.1 (2/5)"
+    echo "  ./.github/scripts/release.sh beta             — Release beta build v1.0.0-beta.1 (3/5)"
+    echo "  ./.github/scripts/release.sh rc               — Release RC build v1.0.0-rc.1 (4/5)"
+    echo "  ./.github/scripts/release.sh stable           — Release stable build v1.0.0 (5/5)"
+    echo "  ./.github/scripts/release.sh dev 1.0.0-dev.2   — Release specific version"
+    echo "  ./.github/scripts/release.sh --help           — Show help"
     echo ""
     echo -e "${YELLOW}=== Quick Start — First Time — 1.0.0 ===${NC}"
-    echo "  ./Scripts/release.sh dev     # Now — Dev internal"
-    echo "  ./Scripts/release.sh alpha   # After dev OK — Alpha internal QA"
-    echo "  ./Scripts/release.sh beta    # After alpha OK — Beta TestFlight"
-    echo "  ./Scripts/release.sh rc      # After beta OK — RC code freeze"
-    echo "  ./Scripts/release.sh stable  # After RC OK — Stable App Store"
+    echo "  ./.github/scripts/release.sh dev     # Now — Dev internal"
+    echo "  ./.github/scripts/release.sh alpha   # After dev OK — Alpha internal QA"
+    echo "  ./.github/scripts/release.sh beta    # After alpha OK — Beta TestFlight"
+    echo "  ./.github/scripts/release.sh rc      # After beta OK — RC code freeze"
+    echo "  ./.github/scripts/release.sh stable  # After RC OK — Stable App Store"
     echo ""
     echo -e "${CYAN}Or manually:${NC}"
     echo "  git tag -a v1.0.0-dev.1 -m \"QELORYX v1.0.0-dev.1 — Dev — 1/5\""
@@ -152,13 +152,13 @@ if [[ ! "$CHANNEL" =~ ^(dev|alpha|beta|rc|stable)$ ]]; then
         echo "  - Stable: GA App Store public"
         echo ""
         echo -e "${YELLOW}Examples:${NC}"
-        echo "  ./Scripts/release.sh dev"
-        echo "  ./Scripts/release.sh alpha"
-        echo "  ./Scripts/release.sh beta"
-        echo "  ./Scripts/release.sh rc"
-        echo "  ./Scripts/release.sh stable"
-        echo "  ./Scripts/release.sh dev v1.0.0-dev.2"
-        echo "  ./Scripts/release.sh beta v1.0.0-beta.2"
+        echo "  ./.github/scripts/release.sh dev"
+        echo "  ./.github/scripts/release.sh alpha"
+        echo "  ./.github/scripts/release.sh beta"
+        echo "  ./.github/scripts/release.sh rc"
+        echo "  ./.github/scripts/release.sh stable"
+        echo "  ./.github/scripts/release.sh dev v1.0.0-dev.2"
+        echo "  ./.github/scripts/release.sh beta v1.0.0-beta.2"
         echo ""
         exit 0
     else
@@ -376,23 +376,23 @@ if [ "$PUSH" = "y" ] || [ "$PUSH" = "Y" ]; then
     case $CHANNEL in
         dev)
             echo -e "${YELLOW}Next in Official Sequence: Alpha${NC}"
-            echo "After dev checklist 5 min pass → ./Scripts/release.sh alpha"
+            echo "After dev checklist 5 min pass → ./.github/scripts/release.sh alpha"
             ;;
         alpha)
             echo -e "${YELLOW}Next in Official Sequence: Beta${NC}"
-            echo "After alpha checklist 30 min 2+ testers pass → ./Scripts/release.sh beta"
+            echo "After alpha checklist 30 min 2+ testers pass → ./.github/scripts/release.sh beta"
             ;;
         beta)
             echo -e "${YELLOW}Next in Official Sequence: RC${NC}"
-            echo "After beta real device 5+ devices 10k tracks 1h background stable crash-free >99% → ./Scripts/release.sh rc"
+            echo "After beta real device 5+ devices 10k tracks 1h background stable crash-free >99% → ./.github/scripts/release.sh rc"
             ;;
         rc)
             echo -e "${YELLOW}Next in Official Sequence: Stable${NC}"
-            echo "After RC all 20+ checklist must pass all validation screenshots → ./Scripts/release.sh stable"
+            echo "After RC all 20+ checklist must pass all validation screenshots → ./.github/scripts/release.sh stable"
             ;;
         stable)
             echo -e "${GREEN}Official Sequence Completed ✅ Dev→Alpha→Beta→RC→Stable${NC}"
-            echo "Next cycle: ./Scripts/release.sh dev v1.1.0-dev.1"
+            echo "Next cycle: ./.github/scripts/release.sh dev v1.1.0-dev.1"
             ;;
     esac
     echo ""

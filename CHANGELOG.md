@@ -15,6 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added — Release automation
 - **Direct IPA release** — `release.yml` now also builds an unsigned arm64 device app (`generic/platform=iOS`, Release, `CODE_SIGNING_ALLOWED=NO`) and packages it as `Qeloryx.ipa` (standard `Payload/Qeloryx.app` layout). Tag pushes (`v*`) publish a GitHub Release/prerelease with both `Qeloryx.ipa` (sideloadable via AltStore/SideStore/Esign/TrollStore after local signing) and the existing `Qeloryx-simulator.zip`. Docs (`Docs/RELEASE_FLOW.md`, `README.md`) and `Scripts/release.sh` output updated to match.
 
+### Added — OSS feature benchmark (see Docs/SHM/SHM-009-oss-feature-benchmark.md)
+- **ReplayGain normalization** — `Core/DSP/ReplayGain/ReplayGainNormalizer.swift`: track/album modes, 89 dB reference, pre-amp, peak-based clipping prevention
+- **Gapless playback + crossfade** — `Core/AstryxAudioEngine/Playback/GaplessPlayback.swift`: playback settings, linear and equal-power fade curves, pure crossfade gain math
+- **Smart playlists** — `Core/LibraryEngine/SmartPlaylists/SmartPlaylist.swift`: 14 rule fields, 12 operators (incl. regex, between, negative rules), AND/OR logic, sorting + limit
+- **M3U/M3U8 playlist import/export** — `Core/LibraryEngine/Playlists/M3UPlaylist.swift`: `#EXTM3U`/`#EXTINF` export, tolerant parser, resolution against library tracks
+- **Tests** — `Tests/CoreTests/OSSFeaturesTests.swift` (13 tests)
+- **Scrobbling** — `Core/ProviderLayer/ScrobbleProvider/ScrobbleProvider.swift`: Last.fm-compatible rules (50% of track or 4 min, 30s minimum), now-playing, offline pending queue with transport flush
+- **Smart queue auto-fill** — `Core/AstryxAudioEngine/Queue/SmartQueueFiller.swift`: TasteDNA-ranked suggestions that exclude already-queued tracks
+- **Metadata tag editor** — `Core/MetadataEngine/TagEditor.swift`: validated read-modify-write edits on `AstryxTrack`
+- **Bit-perfect / USB DAC output** — `Core/AstryxAudioEngine/Session/BitPerfectOutput.swift`: output modes + audiophile settings model
+- **Tests** — `Tests/CoreTests/OSSIntegrationTests.swift` (11 tests)
+- **Research** — `Docs/SHM/SHM-010-oss-master-list.md` (full OSS master-list mapping)
+- **UI wiring** — Audio Lab gains a Playback section (gapless toggle, crossfade slider, ReplayGain mode, output mode incl. bit-perfect DAC); Library menu gains Smart Playlist evaluation + M3U export/import; Player view model gains Last.fm-style scrobbling on track change and smart queue suggestions when the queue runs low
+- **Repo structure cleanup** — uniform `Features/<Feature>/Presentation/` layout, `XxxTests.swift` naming, `Scripts/` moved to `.github/scripts/`
+
 ## [1.0.0] — 2026-09-28 — Stable — App Store Ready ✅
 
 ### Added — All Milestones Production

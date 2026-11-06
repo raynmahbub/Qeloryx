@@ -1,5 +1,5 @@
 // QELORYX — Tests
-// Downloads_Tests.swift
+// DownloadsTests.swift
 // QEL-041 Downloads — State machine, priority, enqueue/pause/resume/cancel/retry, offline optimization
 
 import XCTest

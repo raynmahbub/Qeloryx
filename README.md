@@ -18,7 +18,7 @@ Qeloryx is an iOS music-player project built around an offline-first library, pl
 
 ## Features in development
 
-The codebase includes playback and queue components, library and metadata handling, indexed search, lyrics models, download workflows, Taste DNA/recommendation components, a design system, and iOS platform adapters. Some screens and data paths are prototypes or use sample data; feature presence in source does not imply production readiness or a completed end-to-end user experience.
+The codebase includes playback and queue components (with gapless/crossfade planning and ReplayGain normalization), library and metadata handling (with smart playlists and M3U playlist import/export), indexed search, lyrics models, download workflows, Taste DNA/recommendation components, a design system, and iOS platform adapters. Some screens and data paths are prototypes or use sample data; feature presence in source does not imply production readiness or a completed end-to-end user experience. Feature ideas are benchmarked against top open-source music players — see [Docs/SHM/SHM-009](Docs/SHM/SHM-009-oss-feature-benchmark.md) and [Docs/SHM/SHM-010](Docs/SHM/SHM-010-oss-master-list.md).
 
 ## Requirements
 
@@ -44,19 +44,20 @@ xcodebuild -project Qeloryx.xcodeproj \
 swiftlint lint --strict
 ```
 
-For local setup helpers, see [`Scripts/bootstrap.sh`](Scripts/bootstrap.sh), [`Scripts/lint.sh`](Scripts/lint.sh), and [`Scripts/generate-docs.sh`](Scripts/generate-docs.sh). Generated Xcode projects, build output, and signing assets should not be committed.
+For local setup helpers, see [`.github/scripts/bootstrap.sh`](.github/scripts/bootstrap.sh), [`.github/scripts/lint.sh`](.github/scripts/lint.sh), and [`.github/scripts/generate-docs.sh`](.github/scripts/generate-docs.sh). Generated Xcode projects, build output, and signing assets should not be committed.
 
 ## Repository layout
 
 ```text
 App/                 SwiftUI app entry point and app resources
-Core/                Portable domain and engine code
+Core/                Portable domain and engine code (one folder per engine)
 DesignSystem/        Shared visual foundations and components
-Features/            Feature presentation and application logic
+Features/            One folder per feature: <Feature>/Presentation/ for views,
+                     with ViewModels/ alongside when the feature has them
 Platform/            iOS-specific adapters and integrations
-Tests/               Swift package and app tests
+Tests/               Swift package and app tests (XxxTests.swift naming)
 Docs/                Architecture decisions, build and release guidance
-Scripts/             Local developer and release utilities
+.github/scripts/     Local developer and release utilities
 .github/workflows/   CI, build, performance checks, and release automation
 ```
 

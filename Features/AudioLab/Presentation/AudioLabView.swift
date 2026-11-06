@@ -129,6 +129,58 @@ public struct AudioLabView: View {
         }
     }
     
+    private var playbackSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Playback", icon: "play.circle")
+            
+            VStack(spacing: 16) {
+                Toggle("Gapless Playback", isOn: $viewModel.gaplessEnabled)
+                    .tint(AstryxColors.auroraBlue)
+                    .font(AstryxTypography.Body.small)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Crossfade")
+                            .font(AstryxTypography.Body.small)
+                        Spacer()
+                        Text("\(Int(viewModel.crossfadeDuration))s")
+                            .font(AstryxTypography.Mono.small)
+                            .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
+                    }
+                    Slider(value: $viewModel.crossfadeDuration, in: 0...AstryxPlaybackSettings.maxCrossfadeDuration, step: 1)
+                        .tint(AstryxColors.auroraBlue)
+                        .disabled(!viewModel.gaplessEnabled)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ReplayGain")
+                        .font(AstryxTypography.Body.small)
+                    Picker("ReplayGain", selection: $viewModel.replayGainMode) {
+                        ForEach(ReplayGainMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Output")
+                        .font(AstryxTypography.Body.small)
+                    Picker("Output", selection: $viewModel.outputMode) {
+                        ForEach(AstryxOutputMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(16)
+            .background(AstryxColors.Semantic.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+    
     private var eqSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Equalizer", icon: "slider.horizontal.3")
@@ -263,6 +315,21 @@ public final class AudioLabViewModel: ObservableObject {
     @Published public var currentFormat: String = "FLAC 44.1kHz"
     @Published public var storageInfo: String = "12.4 GB free"
     @Published public var signalPath: [SignalNode] = []
+    
+    // MARK: Playback settings (OSS benchmark: gapless/crossfade, ReplayGain, bit-perfect)
+    @Published public var gaplessEnabled: Bool = true
+    @Published public var crossfadeDuration: TimeInterval = 0
+    @Published public var replayGainMode: ReplayGainMode = .off
+    @Published public var outputMode: AstryxOutputMode = .standard
+    
+    public var playbackSettings: AstryxPlaybackSettings {
+        AstryxPlaybackSettings(gaplessEnabled: gaplessEnabled, crossfadeDuration: crossfadeDuration)
+    }
+    public var outputSettings: AstryxAudioOutputSettings {
+        outputMode == .bitPerfectDAC
+            ? AstryxAudioOutputSettings(bitPerfectEnabled: true, preferredSampleRate: 0, exclusiveMode: true)
+            : .default
+    }
     
     private let dspEngine: any DSPEngineProtocol
     

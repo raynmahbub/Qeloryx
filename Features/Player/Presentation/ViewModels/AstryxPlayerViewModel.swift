@@ -24,9 +24,15 @@ public final class AstryxPlayerViewModel: ObservableObject {
     @Published public var previousArtworkData: Data?
     @Published public var isArtworkTransitioning = false
     
+    // OSS benchmark: smart queue suggestions shown when the queue runs low
+    @Published public var smartSuggestions: [AstryxTrack] = []
+    
     private let audioEngine: any AstryxAudioEngineProtocol
     private let libraryEngine: any LibraryEngineProtocol
     private let eventBus: any EventBusProtocol
+    private let scrobbleProvider: any ScrobbleProviderProtocol
+    private let queueFiller = AstryxSmartQueueFiller()
+    private var playStartedAt: Date?
     private var subscriptionStore = EventSubscriptionStore()
     private var timer: AnyCancellable?
     private var artworkTransitionTask: Task<Void, Never>?
@@ -34,11 +40,13 @@ public final class AstryxPlayerViewModel: ObservableObject {
     public init(
         audioEngine: any AstryxAudioEngineProtocol = AstryxAudioEngine(),
         libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine(),
-        eventBus: any EventBusProtocol = AstryxEventBus.shared
+        eventBus: any EventBusProtocol = AstryxEventBus.shared,
+        scrobbleProvider: any ScrobbleProviderProtocol = AstryxScrobbleProvider()
     ) {
         self.audioEngine = audioEngine
         self.libraryEngine = libraryEngine
         self.eventBus = eventBus
+        self.scrobbleProvider = scrobbleProvider
         observeEvents()
         startPositionTimer()
         refreshQueue()
@@ -120,6 +128,25 @@ public final class AstryxPlayerViewModel: ObservableObject {
             }
         }
         upNext = tracks
+        await refreshSmartSuggestions()
+    }
+    
+    /// When fewer than 2 tracks remain queued, suggest TasteDNA/favorites-based
+    /// tracks to keep playback going (Echo Music "AI queue" style).
+    private func refreshSmartSuggestions() async {
+        let currentIdx = queue.currentIndex ?? 0
+        let remaining = max(0, queue.items.count - (currentIdx + 1))
+        guard remaining < 2 else {
+            smartSuggestions = []
+            return
+        }
+        let library = (try? await libraryEngine.fetchAllTracks()) ?? []
+        let favoriteIDs = library.filter { $0.isFavorite }.map { $0.id }
+        smartSuggestions = queueFiller.suggestedTracks(for: queue, library: library, recommendedTrackIDs: favoriteIDs, limit: 5)
+    }
+    
+    public func playSmartSuggestion(_ trackID: String) async {
+        await playTrack(id: trackID)
     }
     
     private func startPositionTimer() {
