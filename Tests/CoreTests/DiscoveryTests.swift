@@ -1,5 +1,5 @@
 // QELORYX — Tests
-// Discovery_Tests.swift
+// DiscoveryTests.swift
 // QEL-051 Discovery — Taste DNA, recommendations, performance
 
 import XCTest

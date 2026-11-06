@@ -242,4 +242,35 @@ public final class LibraryViewModel: ObservableObject {
     public func scanForDuplicates() async -> [[AstryxTrack]] {
         (try? await libraryEngine.scanForDuplicates()) ?? []
     }
+    
+    // MARK: - Smart Playlists & M3U (OSS benchmark)
+    
+    @Published public var smartPlaylists: [AstryxSmartPlaylist] = []
+    
+    /// A built-in example smart playlist over the current library.
+    public func favoritesSmartPlaylist() -> AstryxSmartPlaylist {
+        AstryxSmartPlaylist(
+            name: "Favorites (Smart)",
+            logic: .and,
+            rules: [SmartPlaylistRule(field: .isFavorite, op: .isTrue)],
+            sort: .title
+        )
+    }
+    
+    public func evaluateSmartPlaylist(_ playlist: AstryxSmartPlaylist) async -> [AstryxTrack] {
+        let library = tracks.isEmpty ? (try? await libraryEngine.fetchAllTracks()) ?? [] : tracks
+        return playlist.evaluate(library)
+    }
+    
+    /// Serializes tracks to an extended M3U document (export).
+    public func exportAsM3U(_ tracks: [AstryxTrack], name: String) -> String {
+        M3UPlaylist.export(tracks: tracks, playlistName: name)
+    }
+    
+    /// Parses M3U/M3U8 text and resolves entries against the current library (import).
+    public func importM3U(_ content: String) async -> [AstryxTrack] {
+        let entries = M3UPlaylist.parse(content)
+        let library = tracks.isEmpty ? (try? await libraryEngine.fetchAllTracks()) ?? [] : tracks
+        return M3UPlaylist.resolve(entries, against: library)
+    }
 }

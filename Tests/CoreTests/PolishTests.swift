@@ -1,5 +1,5 @@
 // QELORYX — Tests
-// Polish_Tests.swift
+// PolishTests.swift
 // 0.9.0-beta Polish — Performance monitor, launch tracking, budgets, haptics, animations
 
 import XCTest

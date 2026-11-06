@@ -80,6 +80,12 @@ public struct LibraryView: View {
             .sheet(isPresented: $showDuplicates) {
                 DuplicatesView(groups: duplicateGroups)
             }
+            .sheet(isPresented: $showSmartPlaylist) {
+                SmartPlaylistResultView(tracks: smartPlaylistTracks)
+            }
+            .sheet(isPresented: $showM3UExport) {
+                M3UExportView(content: exportedM3U)
+            }
             .overlay {
                 if viewModel.isLoading && viewModel.tracks.isEmpty {
                     ProgressView("Loading Library...")
@@ -428,6 +434,54 @@ private extension TimeInterval {
         let minutes = (Int(self) % 3600) / 60
         if hours > 0 { return "\(hours)h \(minutes)m" }
         else { return "\(minutes)m"
+        }
+    }
+}
+
+// MARK: - Smart Playlist Result Sheet
+
+private struct SmartPlaylistResultView: View {
+    let tracks: [AstryxTrack]
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            List(tracks) { track in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(track.displayTitle)
+                        .font(AstryxTypography.Body.medium)
+                    Text(track.displayArtist)
+                        .font(AstryxTypography.Body.caption)
+                        .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
+                }
+            }
+            .navigationTitle("\(tracks.count) tracks")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+// MARK: - M3U Export Sheet
+
+private struct M3UExportView: View {
+    let content: String
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(content)
+                    .font(AstryxTypography.Mono.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+            .navigationTitle("M3U Export")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Copy") { UIPasteboard.general.string = content }
+                }
+            }
         }
     }
 }

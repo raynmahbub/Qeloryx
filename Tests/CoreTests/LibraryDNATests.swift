@@ -1,5 +1,5 @@
 // QELORYX — Tests
-// LibraryDNA_Tests.swift
+// LibraryDNATests.swift
 // QEL-024 Library DNA — Multi-library, grouping, folder view, incremental indexing, artwork cache FS
 
 import XCTest

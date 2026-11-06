@@ -171,9 +171,9 @@ git push origin v1.0.0
 
 **Usage:**
 ```bash
-./Scripts/bootstrap.sh  # Setup env
-./Scripts/lint.sh        # Lint + arch check
-./Scripts/generate-docs.sh # Generate docs
+./.github/scripts/bootstrap.sh  # Setup env
+./.github/scripts/lint.sh        # Lint + arch check
+./.github/scripts/generate-docs.sh # Generate docs
 ```
 
 ---
@@ -232,8 +232,8 @@ xcodebuild archive -project Qeloryx.xcodeproj -scheme Qeloryx -configuration Rel
 
 1. **Local Build Verify:**
    ```bash
-   ./Scripts/bootstrap.sh
-   ./Scripts/lint.sh
+   ./.github/scripts/bootstrap.sh
+   ./.github/scripts/lint.sh
    swift test
    ```
 
@@ -313,10 +313,11 @@ QELORYX/
 ├── Tests/
 │   ├── CoreTests/ — 11 files AstryxAudioEngine/CapabilityRegistry/Downloads 10 tests/EventBus/LibraryDNA 9 tests/LibraryEngine/LyricsPlus 9 tests/Player/SearchEngine/Discovery 8 tests/Polish 7 tests
 │   └── DesignSystemTests/ — AstryxColorsTests
-├── Scripts/
+├── .github/scripts/
 │   ├── bootstrap.sh — 1.0.0 Stable
 │   ├── lint.sh — 1.0.0 Stable
-│   └── generate-docs.sh — 1.0.0 Stable
+│   ├── generate-docs.sh — 1.0.0 Stable
+│   └── release.sh — 1.0.0 Stable
 ├── .github/workflows/
 │   ├── ci.yml — 1.0.0 Stable 7 jobs comprehensive
 │   ├── build.yml — 1.0.0 Stable 3 jobs App Store Ready archive
