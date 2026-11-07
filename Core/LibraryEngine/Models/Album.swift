@@ -76,7 +76,16 @@ public struct AstryxPlaylist: Identifiable, Sendable, Equatable, Hashable {
     public var dateModified: Date
     public var isSmart: Bool
     
-    public init(id: String = UUID().uuidString, name: String, description: String? = nil, trackIDs: [String] = [], artworkURL: URL? = nil, dateCreated: Date = Date(), dateModified: Date = Date(), isSmart: Bool = false) {
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        description: String? = nil,
+        trackIDs: [String] = [],
+        artworkURL: URL? = nil,
+        dateCreated: Date = Date(),
+        dateModified: Date = Date(),
+        isSmart: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.description = description

@@ -3,7 +3,14 @@
 // QEL-012 Player Milestone
 
 import XCTest
+#if canImport(QeloryxCore)
 @testable import QeloryxCore
+#else
+// The XcodeGen app target is a single module named `Qeloryx` (App + Core +
+// Features + Platform + DesignSystem compiled together), so `QeloryxCore` does
+// not exist there. `swift test` uses the multi-module SPM targets above.
+@testable import Qeloryx
+#endif
 
 final class PlayerTests: XCTestCase {
     
@@ -33,7 +40,8 @@ final class PlayerTests: XCTestCase {
             nowPlayingManager: nowPlaying,
             liveActivityManager: liveActivity,
             hapticEngine: haptics,
-            avAdapter: avAdapter
+            avAdapter: avAdapter,
+            sourceResolver: Self.resolver(for: ["track-1", "track-2", "track-3"])
         )
     }
     
@@ -49,6 +57,28 @@ final class PlayerTests: XCTestCase {
         XCTAssertTrue(engine.playbackState.isPlaying)
         XCTAssertEqual(engine.playbackState.currentTrackID, "track-1")
     }
+
+    /// BUG-02 regression guard. An unresolvable track must fail loudly, never
+    /// be reported as `.playing` over silence.
+    func testUnresolvableTrackFailsInsteadOfPretendingToPlay() async {
+        let emptyEngine = AstryxAudioEngine(
+            queueController: AstryxQueueController(eventBus: eventBus),
+            sessionManager: sessionManager,
+            eventBus: eventBus,
+            nowPlayingManager: nowPlaying,
+            liveActivityManager: liveActivity,
+            hapticEngine: haptics,
+            avAdapter: avAdapter,
+            sourceResolver: Self.resolver(for: [])
+        )
+
+        do {
+            try await emptyEngine.handle(command: .playQueue(queue: ["missing"], startIndex: 0))
+            XCTFail("playing an unresolved track must throw")
+        } catch {
+            XCTAssertFalse(emptyEngine.playbackState.isPlaying)
+        }
+    }
     
     func testArtworkTransitionLogic() async throws {
         let trackIDs = ["track-1", "track-2"]
@@ -57,6 +87,20 @@ final class PlayerTests: XCTestCase {
         try await engine.handle(command: .next)
         let secondID = engine.playbackState.currentTrackID
         XCTAssertNotEqual(firstID, secondID)
+    }
+
+    static func resolver(for trackIDs: [String]) -> DictionaryPlaybackSourceResolver {
+        DictionaryPlaybackSourceResolver(tracks: trackIDs.map { id in
+            AstryxTrack(
+                id: id,
+                title: "Track \(id)",
+                artist: "Artist",
+                album: "Album",
+                duration: 180,
+                fileURL: URL(fileURLWithPath: "/library/\(id).m4a"),
+                fileFormat: .m4a
+            )
+        })
     }
     
     func testBackgroundPlaybackConfiguration() throws {
@@ -129,9 +173,12 @@ final class PlayerTests: XCTestCase {
     }
 
     private func makeCrossfadeQueue(currentIndex: Int, repeatMode: AstryxRepeatMode = .off, shuffle: Bool = false) -> AstryxQueue {
+        // `AstryxQueue.currentIndex` is the only current-item source of truth;
+        // `AstryxQueueItem.isCurrent` was removed (BUG-11 adjacent: it was set
+        // once and never maintained).
         let items = [
-            AstryxQueueItem(trackID: "track-1", order: 0, isCurrent: currentIndex == 0),
-            AstryxQueueItem(trackID: "track-2", order: 1, isCurrent: currentIndex == 1)
+            AstryxQueueItem(trackID: "track-1", order: 0),
+            AstryxQueueItem(trackID: "track-2", order: 1)
         ]
         return AstryxQueue(items: items, currentIndex: currentIndex, shuffleEnabled: shuffle, repeatMode: repeatMode)
     }
@@ -175,7 +222,8 @@ final class PlayerTests: XCTestCase {
             nowPlayingManager: nowPlaying,
             liveActivityManager: liveActivity,
             hapticEngine: haptics,
-            avAdapter: mock
+            avAdapter: mock,
+            sourceResolver: Self.resolver(for: ["track-1", "track-2"])
         )
         try await crossfadeEngine.handle(command: .playQueue(queue: ["track-1", "track-2"], startIndex: 0))
         try await crossfadeEngine.handle(command: .setCrossfade(CrossfadeConfiguration(duration: 6, curve: .equalPower)))
@@ -202,7 +250,8 @@ final class PlayerTests: XCTestCase {
             nowPlayingManager: nowPlaying,
             liveActivityManager: liveActivity,
             hapticEngine: haptics,
-            avAdapter: mock
+            avAdapter: mock,
+            sourceResolver: Self.resolver(for: ["track-1", "track-2"])
         )
         try await crossfadeEngine.handle(command: .playQueue(queue: ["track-1", "track-2"], startIndex: 0))
         mock.stubbedCurrentTime = 179.5
@@ -215,7 +264,7 @@ final class PlayerTests: XCTestCase {
 // MARK: - Crossfade test doubles
 
 private final class MockCrossfadeAdapter: CrossfadeCapableAudioPlayer, @unchecked Sendable {
-    weak var delegate: AVFoundationAdapterDelegate?
+    weak var delegate: (any AVFoundationAdapterDelegate)?
     var stubbedCurrentTime: TimeInterval = 0
     var stubbedIsPlaying = true
     private(set) var preparedNextURLs: [URL] = []

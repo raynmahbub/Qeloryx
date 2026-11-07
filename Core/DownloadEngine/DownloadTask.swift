@@ -4,7 +4,8 @@
 
 import Foundation
 
-public struct AstryxDownloadTask: Identifiable, Sendable, Equatable {
+/// `Codable` so the task table can survive relaunch (BUG-09).
+public struct AstryxDownloadTask: Identifiable, Sendable, Equatable, Codable {
     public let id: String
     public let trackID: String?
     public let sourceURL: URL
@@ -89,7 +90,7 @@ public struct AstryxDownloadTask: Identifiable, Sendable, Equatable {
     }
 }
 
-public enum DownloadPriority: Int, Sendable, Comparable, CaseIterable {
+public enum DownloadPriority: Int, Sendable, Comparable, CaseIterable, Codable {
     case low = 0
     case normal = 1
     case high = 2

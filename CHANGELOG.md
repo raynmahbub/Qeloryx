@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Branding
+- **App icon** — generated `AppIcon.appiconset` (18 images: iPhone 20/29/40/60 pt @2x/@3x, iPad 20/29/40/76 pt @1x/@2x and 83 pt @2x, plus the 1024 marketing icon). `project.yml` already named `AppIcon` but no asset catalog existed, so builds shipped the blank placeholder icon.
+- **Brand mark** — the aurora **Q** monogram: a geometric ring with a tapered 45° tail, filled with the Midnight Aurora gradient (`#3B82F6` → `#8B5CF6` → `#06B6D4`) over the `#050816` field.
+- **Logo typeface** — bundled Space Grotesk Bold/Medium (OFL-1.1, font version 2.000) at `App/Resources/Fonts/`, registered via `UIAppFonts`. `AstryxTypography.Logo` had referenced `SpaceGrotesk-Bold` all along but the font was never shipped, so every logo token silently fell back to the system face.
+- **Wordmark lockups** — dark, light, and transparent, in `Docs/Branding/`, with the mark at 1.30x cap height and a 0.40x cap gap.
+- **Accent colour** — `AccentColor` asset (`#3B82F6`) wired through `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`.
+- **`AstryxBrandMark` / `AstryxWordmark` / `AstryxBrandLockup`** — typed access to the assets, so call sites never spell asset names as string literals.
+- **Asset generator** — `Tools/branding/build_brand_assets.py` derives every icon and lockup from the design tokens in `AstryxColors.swift`, so artwork cannot drift from the interface.
+- **Docs** — `Docs/BRANDING.md` (palette, geometry, usage rules), README header lockup, and the font recorded in `THIRD-PARTY-NOTICES.md`.
+- **CI** — the `docs` job now fails if a catalog references a missing file, or if the marketing icon is not a 1024x1024 alpha-free square (an App Store Connect rejection).
+
+### Fixed — Compile and configuration errors
+- **`AstryxAudioEngine.stop()` was `private`** but called from `AstryxAudioEngine+Actions.swift`; Swift's `private` is file-scoped, so `next()` could not reach it.
+- **Six bare protocol existentials** (`as? CrossfadeCapableAudioPlayer`, `delegate: AVFoundationAdapterDelegate?`, …). `Package.swift` enables the `ExistentialAny` upcoming feature for `QeloryxCore`, which makes each of these an error; all now carry `any`.
+- **`EnvironmentKey.defaultValue` was a stored `static var`** for the event-bus key. The requirement is get-only, and a mutable global is an error under `SWIFT_STRICT_CONCURRENCY: complete`.
+- **Un-injected environment defaults returned live engines** (an empty `AstryxLibraryEngine` on an in-memory store, a real `AstryxAudioEngine`, …). A view that never received its dependency therefore rendered a plausible empty library instead of failing visibly. Defaults are now inert stand-ins (`UnconfiguredAudioEngine`, `UnconfiguredLibraryEngine`, `UnconfiguredDownloadSession`) that refuse work and log once.
+- **`AppRoute` patterns omitted associated values** in four switches (`case .player:` for `case player(trackID:)`, and grouped `case .album, .artist …` for payload cases). Also `AppRoute.id` returned a constant `"player"` for `.player(trackID:)`, so two different player routes were indistinguishable to `sheet(item:)`.
+- **`UIRequiredDeviceCapabilities` was `armv7`** — a 32-bit capability on an iOS 17 (arm64-only) target; App Store Connect rejects that combination. Now `arm64`.
+- **iOS test targets could not resolve their imports.** All 20 test files used `@testable import QeloryxCore`, but the XcodeGen app target is one module named `Qeloryx`. Test files now use a `#if canImport` shim. `QeloryxTests` also globbed all of `Tests/` and compiled the 19 `CoreTests` classes into both bundles, and `QeloryxCoreTests` declared no dependency on the app target; sources are now disjoint and both depend on `Qeloryx`.
+- **`try await super.setUp()`** in two test classes — `XCTestCase.setUp()` is synchronous.
+
 ### Fixed — Build integrity
 - **SPM package compile failure** — `NowPlayingCommandHandler` was defined in the Platform target while `Core/AstryxAudioEngine` conformed to it; Core does not depend on Platform, so `swift build -c release` failed (`cannot find type 'NowPlayingCommandHandler' in scope`). The protocol now lives in `Core/Shared/Protocols` beside the other platform-facing abstractions, with the same dual-variant signatures (MPRemoteCommandHandlerStatus on iOS, Int elsewhere).
 - **Missing SPM module imports** — added `#if canImport(QeloryxCore)\nimport QeloryxCore` to all `Platform` and `DesignSystem` sources so the multi-module SPM build resolves Core types while the single-target xcodegen build treats the shim as a no-op.

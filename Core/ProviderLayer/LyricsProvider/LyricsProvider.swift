@@ -222,18 +222,8 @@ public final class AstryxLyricsProvider: LyricsProviderProtocol {
                         let key = String(trimmed[keyRange]).lowercased()
                         let value = String(trimmed[valueRange]).trimmingCharacters(in: .whitespaces)
                         
-                        switch key {
-                        case "ti": metadata.title = value
-                        case "ar": metadata.artist = value
-                        case "al": metadata.album = value
-                        case "au": metadata.author = value
-                        case "offset":
-                            if let ms = Double(value) {
-                                offset = ms / 1000.0
-                                metadata.offset = offset
-                            }
-                        default: break
-                        }
+                        Self.applyMetadata(key: key, value: value, to: &metadata)
+                        offset = metadata.offset
                         
                         // If it's metadata, don't try to parse as lyric line
                         if ["ti", "ar", "al", "au", "offset", "by", "length"].contains(key) {
@@ -270,37 +260,115 @@ public final class AstryxLyricsProvider: LyricsProviderProtocol {
                    let secRange = Range(match.range(at: 2), in: trimmed),
                    let msRange = Range(match.range(at: 3), in: trimmed) {
                     
-                    let minutes = Double(trimmed[minRange]) ?? 0
-                    let seconds = Double(trimmed[secRange]) ?? 0
-                    let milliseconds = Double(trimmed[msRange]) ?? 0
-                    let msDivisor = trimmed[msRange].count == 2 ? 100.0 : 1000.0
-                    
-                    var startTime = minutes * 60 + seconds + milliseconds / msDivisor
-                    startTime += offset // Apply offset
-                    
-                    lines.append(AstryxLyricLine(text: lyricText, startTime: startTime))
+                    if let startTime = Self.timestamp(
+                        minutes: String(trimmed[minRange]),
+                        seconds: String(trimmed[secRange]),
+                        fraction: String(trimmed[msRange])
+                    ) {
+                        lines.append(AstryxLyricLine(text: lyricText, startTime: startTime + offset))
+                    }
                 }
             }
         }
         
-        // Sort by start time and calculate end times
-        lines.sort { $0.startTime < $1.startTime }
-        var withEndTimes: [AstryxLyricLine] = []
-        for (index, line) in lines.enumerated() {
-            let endTime = index + 1 < lines.count ? lines[index + 1].startTime : nil
-            withEndTimes.append(AstryxLyricLine(
-                text: line.text,
-                startTime: line.startTime,
-                endTime: endTime,
-                words: line.words,
-                isTranslation: line.isTranslation,
-                translation: line.translation
-            ))
-        }
-        
+        let withEndTimes = Self.sortedWithEndTimes(lines)
         return AstryxLyrics(trackID: trackID, lines: withEndTimes, isSynced: !withEndTimes.isEmpty, metadata: metadata)
     }
     
+    // MARK: - Parsing helpers
+
+    /// Applies one `[key:value]` metadata tag. `offset` is in milliseconds and
+    /// is converted to seconds, which is the unit `startTime` uses.
+    private static func applyMetadata(key: String, value: String, to metadata: inout LyricsMetadata) {
+        switch key {
+        case "ti": metadata.title = value
+        case "ar": metadata.artist = value
+        case "al": metadata.album = value
+        case "au": metadata.author = value
+        case "offset":
+            if let ms = Double(value) {
+                metadata.offset = ms / 1000.0
+            }
+        default: break
+        }
+    }
+
+    /// Converts an LRC `[mm:ss.xx]` triple into seconds.
+    ///
+    /// The fraction is 2 or 3 digits; 2 digits are hundredths, 3 are
+    /// thousandths. Anything that is not a number yields `nil` so the caller
+    /// drops the line rather than emitting a bogus `0:00` cue.
+    private static func timestamp(minutes: String, seconds: String, fraction: String) -> TimeInterval? {
+        guard let m = Double(minutes), let s = Double(seconds), let f = Double(fraction) else {
+            return nil
+        }
+        let divisor: Double = fraction.count == 2 ? 100.0 : 1000.0
+        return m * 60 + s + f / divisor
+    }
+
+    /// Extracts karaoke `<mm:ss.xx>` words from one line.
+    ///
+    /// Returns the words (with end times filled from the next word) plus the
+    /// plain text to show when a renderer ignores word-level timing. When the
+    /// line carries no word timings, the plain text is the line itself.
+    private static func parseWords(
+        in lineText: String,
+        regex: NSRegularExpression?,
+        offset: TimeInterval
+    ) -> ([AstryxLyricWord], String) {
+        guard let regex else { return ([], lineText) }
+
+        let range = NSRange(lineText.startIndex..., in: lineText)
+        let matches = regex.matches(in: lineText, range: range)
+        guard !matches.isEmpty else { return ([], lineText) }
+
+        var words: [AstryxLyricWord] = []
+        var plain = ""
+
+        for match in matches {
+            guard let minRange = Range(match.range(at: 1), in: lineText),
+                  let secRange = Range(match.range(at: 2), in: lineText),
+                  let msRange = Range(match.range(at: 3), in: lineText),
+                  let textRange = Range(match.range(at: 4), in: lineText),
+                  let start = timestamp(
+                      minutes: String(lineText[minRange]),
+                      seconds: String(lineText[secRange]),
+                      fraction: String(lineText[msRange])
+                  ) else { continue }
+
+            let wordText = String(lineText[textRange]).trimmingCharacters(in: .whitespaces)
+            guard !wordText.isEmpty else { continue }
+
+            words.append(AstryxLyricWord(text: wordText, startTime: start + offset))
+            plain += wordText + " "
+        }
+
+        // Word end time is the next word's start; the last word stays open.
+        let withEnds = words.enumerated().map { index, word in
+            AstryxLyricWord(
+                text: word.text,
+                startTime: word.startTime,
+                endTime: index + 1 < words.count ? words[index + 1].startTime : nil
+            )
+        }
+        return (withEnds, plain.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Sorts cues and fills in each line's end time from the next line's start.
+    private static func sortedWithEndTimes(_ lines: [AstryxLyricLine]) -> [AstryxLyricLine] {
+        let sorted = lines.sorted { $0.startTime < $1.startTime }
+        return sorted.enumerated().map { index, line in
+            AstryxLyricLine(
+                text: line.text,
+                startTime: line.startTime,
+                endTime: index + 1 < sorted.count ? sorted[index + 1].startTime : nil,
+                words: line.words,
+                isTranslation: line.isTranslation,
+                translation: line.translation
+            )
+        }
+    }
+
     // MARK: - Enhanced LRC Parsing — Karaoke word-level: [mm:ss.xx] <mm:ss.xx>word <mm:ss.xx>word
     
     public func parseEnhancedLRC(_ lrcString: String, trackID: String) -> AstryxLyrics {
@@ -320,14 +388,15 @@ public final class AstryxLyricsProvider: LyricsProviderProtocol {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return }
             
-            // Metadata check (same as standard)
-            if trimmed.hasPrefix("[ti:") || trimmed.hasPrefix("[ar:") || trimmed.hasPrefix("[al:") || trimmed.hasPrefix("[offset:") {
-                if trimmed.hasPrefix("[offset:") {
-                    let offsetStr = trimmed.replacingOccurrences(of: "[offset:", with: "").replacingOccurrences(of: "]", with: "")
-                    if let ms = Double(offsetStr) {
-                        offset = ms / 1000.0
-                        metadata.offset = offset
-                    }
+            // Metadata check (same keys as the standard parser)
+            if trimmed.hasPrefix("[ti:") || trimmed.hasPrefix("[ar:") || trimmed.hasPrefix("[al:")
+                || trimmed.hasPrefix("[au:") || trimmed.hasPrefix("[offset:") {
+                if let key = trimmed.dropFirst().split(separator: ":").first.map(String.init) {
+                    let value = trimmed
+                        .replacingOccurrences(of: "[\(key):", with: "")
+                        .replacingOccurrences(of: "]", with: "")
+                    Self.applyMetadata(key: key.lowercased(), value: value, to: &metadata)
+                    offset = metadata.offset
                 }
                 return
             }
@@ -341,81 +410,29 @@ public final class AstryxLyricsProvider: LyricsProviderProtocol {
                   let msRange = Range(match.range(at: 3), in: trimmed),
                   let textRange = Range(match.range(at: 4), in: trimmed) else { return }
             
-            let minutes = Double(trimmed[minRange]) ?? 0
-            let seconds = Double(trimmed[secRange]) ?? 0
-            let milliseconds = Double(trimmed[msRange]) ?? 0
-            let msDivisor = trimmed[msRange].count == 2 ? 100.0 : 1000.0
-            
-            var lineStartTime = minutes * 60 + seconds + milliseconds / msDivisor
-            lineStartTime += offset
+            guard let parsedStart = Self.timestamp(
+                minutes: String(trimmed[minRange]),
+                seconds: String(trimmed[secRange]),
+                fraction: String(trimmed[msRange])
+            ) else { return }
+            let lineStartTime = parsedStart + offset
             
             let lineText = String(trimmed[textRange]).trimmingCharacters(in: .whitespaces)
             if lineText.isEmpty { return }
             
-            // Parse words
-            var words: [AstryxLyricWord] = []
-            var plainText = ""
-            
-            if let wordRegex = wordRegex {
-                let text = lineText
-                let textRange = NSRange(text.startIndex..., in: text)
-                let wordMatches = wordRegex.matches(in: text, range: textRange)
-                
-                if !wordMatches.isEmpty {
-                    for wordMatch in wordMatches {
-                        if let wMinRange = Range(wordMatch.range(at: 1), in: text),
-                           let wSecRange = Range(wordMatch.range(at: 2), in: text),
-                           let wMsRange = Range(wordMatch.range(at: 3), in: text),
-                           let wTextRange = Range(wordMatch.range(at: 4), in: text) {
-                            
-                            let wMin = Double(text[wMinRange]) ?? 0
-                            let wSec = Double(text[wSecRange]) ?? 0
-                            let wMs = Double(text[wMsRange]) ?? 0
-                            let wMsDivisor = text[wMsRange].count == 2 ? 100.0 : 1000.0
-                            
-                            var wordStart = wMin * 60 + wSec + wMs / wMsDivisor
-                            wordStart += offset
-                            
-                            let wordText = String(text[wTextRange]).trimmingCharacters(in: .whitespaces)
-                            if !wordText.isEmpty {
-                                words.append(AstryxLyricWord(text: wordText, startTime: wordStart))
-                                plainText += wordText + " "
-                            }
-                        }
-                    }
-                    
-                    // Calculate word end times
-                    var wordsWithEnd: [AstryxLyricWord] = []
-                    for (idx, word) in words.enumerated() {
-                        let end = idx + 1 < words.count ? words[idx + 1].startTime : nil
-                        wordsWithEnd.append(AstryxLyricWord(text: word.text, startTime: word.startTime, endTime: end))
-                    }
-                    words = wordsWithEnd
-                    plainText = plainText.trimmingCharacters(in: .whitespaces)
-                } else {
-                    plainText = lineText
-                }
-            } else {
-                plainText = lineText
-            }
-            
+            let (words, plainText) = Self.parseWords(in: lineText, regex: wordRegex, offset: offset)
+
             let finalText = plainText.isEmpty ? lineText : plainText
             lines.append(AstryxLyricLine(text: finalText, startTime: lineStartTime, words: words))
         }
         
-        // Sort and calculate line end times
-        lines.sort { $0.startTime < $1.startTime }
-        var withEndTimes: [AstryxLyricLine] = []
-        for (index, line) in lines.enumerated() {
-            let endTime = index + 1 < lines.count ? lines[index + 1].startTime : nil
-            withEndTimes.append(AstryxLyricLine(
-                text: line.text,
-                startTime: line.startTime,
-                endTime: endTime,
-                words: line.words
-            ))
-        }
-        
-        return AstryxLyrics(trackID: trackID, lines: withEndTimes, isSynced: !withEndTimes.isEmpty, isKaraoke: withEndTimes.contains { $0.isKaraoke }, metadata: metadata)
+        let withEndTimes = Self.sortedWithEndTimes(lines)
+        return AstryxLyrics(
+            trackID: trackID,
+            lines: withEndTimes,
+            isSynced: !withEndTimes.isEmpty,
+            isKaraoke: withEndTimes.contains { $0.isKaraoke },
+            metadata: metadata
+        )
     }
 }

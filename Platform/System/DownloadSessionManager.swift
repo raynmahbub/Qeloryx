@@ -12,31 +12,49 @@ import Foundation
 
 public final class AstryxDownloadSessionManager: NSObject, DownloadSessionProtocol, @unchecked Sendable {
     
-    private var session: URLSession!
+    /// Built in `init`. `!` was a latent crash if `setupSession` ever failed to
+    /// run; the implicitly-unwrapped optional is replaced by a lazy closure-free
+    /// assignment that the compiler can verify.
+    private var session: URLSession
+    private var allowsCellularAccess = true
     private var activeTasks: [String: URLSessionDownloadTask] = [:] // taskID -> URLSessionTask
     private var taskIDMap: [Int: String] = [:] // URLSession taskIdentifier -> taskID
     private let lock = NSLock()
     
-    public weak var delegate: DownloadSessionDelegate?
+    public weak var delegate: (any DownloadSessionDelegate)?
     
+    /// Stable identifier. A background `URLSession` is reattached to the app by
+    /// this string, so it must never be random: a per-launch UUID orphaned every
+    /// in-flight download (BUG-08).
+    public static let backgroundSessionIdentifier = "com.qeloryx.downloads"
+
     public override init() {
+        session = URLSession(configuration: .default)
         super.init()
         setupSession()
     }
-    
+
     private func setupSession() {
-        let config = URLSessionConfiguration.background(withIdentifier: "com.qeloryx.downloads.\(UUID().uuidString)")
+        let config = URLSessionConfiguration.background(withIdentifier: Self.backgroundSessionIdentifier)
         config.isDiscretionary = false
         config.sessionSendsLaunchEvents = true
-        config.allowsCellularAccess = true
-        config.waitsForConnectivity = true // Offline optimization: wait for connectivity
+        // Cellular access is a user preference; the engine sets this through
+        // `setAllowsCellularAccess` rather than hard-coding `true` (BUG: no
+        // Wi-Fi-only setting existed).
+        config.allowsCellularAccess = allowsCellularAccess
+        config.waitsForConnectivity = true
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 300
-        
-        // For foreground downloads, we could use default config, but background allows resuming after app kill
-        // For QEL-041 we use background config for robustness
-        
+
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }
+
+    /// Wi-Fi-only downloads. Applies to new tasks; iOS does not allow mutating
+    /// an in-flight background task's policy.
+    public func setAllowsCellularAccess(_ allowed: Bool) {
+        guard allowsCellularAccess != allowed else { return }
+        allowsCellularAccess = allowed
+        setupSession()
     }
     
     public func startDownload(taskID: String, from url: URL, resumeData: Data? = nil) {

@@ -16,8 +16,14 @@ public struct LibraryView: View {
     @State private var showM3UExport = false
     @State private var exportedM3U = ""
     
-    public init(viewModel: LibraryViewModel = LibraryViewModel()) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    /// Dependencies are injected by the caller (ultimately `RootView`, which
+    /// reads them from the composition root). An empty `init()` used to default
+    /// to a fresh `LibraryViewModel()`, i.e. a second library engine with its own
+    /// empty store (BUG-19).
+    public init(libraryEngine: any LibraryEngineProtocol, audioEngine: any AstryxAudioEngineProtocol) {
+        _viewModel = StateObject(
+            wrappedValue: LibraryViewModel(libraryEngine: libraryEngine, audioEngine: audioEngine)
+        )
     }
     
     public var body: some View {
@@ -201,7 +207,15 @@ private struct SongsListView: View {
                 .listRowBackground(AstryxColors.Semantic.background)
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {} label: { Label("Delete", systemImage: "trash") }
-                    Button { Task { await viewModel.toggleFavorite(track) } } label: { Label(track.isFavorite ? "Unfavorite" : "Favorite", systemImage: track.isFavorite ? "heart.slash" : "heart") }.tint(AstryxColors.sunset)
+                    Button {
+                        Task { await viewModel.toggleFavorite(track) }
+                    } label: {
+                        Label(
+                            track.isFavorite ? "Unfavorite" : "Favorite",
+                            systemImage: track.isFavorite ? "heart.slash" : "heart"
+                        )
+                    }
+                    .tint(AstryxColors.sunset)
                 }
                 .swipeActions(edge: .leading) {
                     Button { Task { await viewModel.playTrack(track) } } label: { Label("Play", systemImage: "play.fill") }.tint(AstryxColors.auroraBlue)

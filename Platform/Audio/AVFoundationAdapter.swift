@@ -22,7 +22,7 @@ public final class AVFoundationAdapter: AudioPlayerAdapterProtocol, @unchecked S
     private var statusObserver: NSKeyValueObservation?
     private var endObserver: NSObjectProtocol?
     
-    public weak var delegate: AVFoundationAdapterDelegate?
+    public weak var delegate: (any AVFoundationAdapterDelegate)?
     
     private let lock = NSLock()
     
@@ -198,7 +198,7 @@ extension AVFoundationAdapter {
 #else
 
 public final class AVFoundationAdapter: AudioPlayerAdapterProtocol, @unchecked Sendable {
-    public weak var delegate: AVFoundationAdapterDelegate?
+    public weak var delegate: (any AVFoundationAdapterDelegate)?
     public init() {}
     public func load(url: URL) throws {}
     public func load(track: AstryxTrack) throws {}

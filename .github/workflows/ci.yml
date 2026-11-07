@@ -27,148 +27,258 @@ jobs:
       - name: Show toolchain
         run: swift --version
       - name: Build
+        id: build
         run: |
           set -o pipefail
-          swift build -v 2>&1 | tee swift-build.log
+          swift build 2>&1 | tee swift-build.log
+      - name: Surface compiler errors in check annotations
+        # The iOS job already does this; without it a Swift package build
+        # failure shows up only as "exit code 1" with no diagnostic, and the
+        # log artifact cannot be fetched when blob storage is unreachable.
+        # `swift build` (not -v) plus unambiguous per-module retries pin the
+        # failing module and print the first real compiler error as ::error.
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, sys
+
+          log = Path("swift-build.log")
+          lines = log.read_text(errors="replace").splitlines() if log.exists() else []
+
+          diagnostic = re.compile(r"^/\S+\.swift:\d+:\d+: (?:error|fatal error):")
+          grabbed = re.compile(r"^(?:ld|clang|swiftc|error): ")
+
+          found = [l for l in lines if diagnostic.match(l) or grabbed.match(l)]
+          for line in found[:25]:
+              escaped = line.replace("%", "%25")
+              print(f"::error title=Swift package build diagnostic::{escaped}")
+
+          if found:
+              raise SystemExit(0)
+
+          # No parseable diagnostic: rebuild each library on its own so the
+          # annotation names the module that actually fails.
+          for target in ("QeloryxCore", "QeloryxDesignSystem", "QeloryxPlatform"):
+              result = subprocess.run(
+                  ["swift", "build", "--target", target],
+                  capture_output=True, text=True
+              )
+              if result.returncode != 0:
+                  print(f"::error title=Swift package build failed::"
+                        f"`swift build --target {target}` failed with "
+                        f"exit code {result.returncode}; see swift-build.log.")
+                  tail = (result.stderr or result.stdout).strip().splitlines()[-12:]
+                  for line in tail:
+                      print(f"::error title={target}::{line[:300]}".replace("%", "%25"))
+                  raise SystemExit(0)
+
+          print("::error title=Swift package build failed::"
+                "No compiler diagnostic was captured; inspect swift-build.log.")
+          PY
       # Test classes run one step each with their own step-level timeouts —
       # the whole suite in a single `swift test` invocation has wedged more
       # than once without naming the hanging test (piped XCTest output is
       # block-buffered, so a hard kill loses the tail). This mirrors the
       # Release workflow's fan-out.
+      # One step per test class so a single red class cannot hide the rest
+      # (BUG-24). Every step is `continue-on-error`; the gate below fails
+      # the job only after all of them have run.
       - name: Test AstryxAudioEngineTests
-        timeout-minutes: 6
+        timeout-minutes: 10
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter AstryxAudioEngineTests 2>&1 | tee test-AstryxAudioEngineTests.log
       - name: Test AstryxColorsTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter AstryxColorsTests 2>&1 | tee test-AstryxColorsTests.log
       - name: Test CapabilityRegistryTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter CapabilityRegistryTests 2>&1 | tee test-CapabilityRegistryTests.log
       - name: Test DiscoveryTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter DiscoveryTests 2>&1 | tee test-DiscoveryTests.log
-      # DownloadsTests has wedged at the class level before; per-method
-      # steps keep a hanging case visible in the step list.
-      - name: Test DownloadsTests.testCancel
-        timeout-minutes: 3
+      - name: Test DownloadEngineHonestyTests
+        timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
-          swift test -c release --filter DownloadsTests.testCancel 2>&1 | tee test-DownloadsTests-testCancel.log
-      - name: Test DownloadsTests.testConcurrentLimit
-        timeout-minutes: 3
+          swift test -c release --filter DownloadEngineHonestyTests 2>&1 | tee test-DownloadEngineHonestyTests.log
+      - name: Test DownloadTaskStoreTests
+        timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
-          swift test -c release --filter DownloadsTests.testConcurrentLimit 2>&1 | tee test-DownloadsTests-testConcurrentLimit.log
-      - name: Test DownloadsTests.testDownloadErrorRetryable
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testDownloadErrorRetryable 2>&1 | tee test-DownloadsTests-testDownloadErrorRetryable.log
-      - name: Test DownloadsTests.testEnqueueAndAllTasks
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testEnqueueAndAllTasks 2>&1 | tee test-DownloadsTests-testEnqueueAndAllTasks.log
-      - name: Test DownloadsTests.testFormattedProgressAndBytes
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testFormattedProgressAndBytes 2>&1 | tee test-DownloadsTests-testFormattedProgressAndBytes.log
-      - name: Test DownloadsTests.testPauseAndResume
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testPauseAndResume 2>&1 | tee test-DownloadsTests-testPauseAndResume.log
-      - name: Test DownloadsTests.testPriorityOrdering
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testPriorityOrdering 2>&1 | tee test-DownloadsTests-testPriorityOrdering.log
-      - name: Test DownloadsTests.testRetryWithBackoff
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testRetryWithBackoff 2>&1 | tee test-DownloadsTests-testRetryWithBackoff.log
-      - name: Test DownloadsTests.testStateMachineTransitions
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testStateMachineTransitions 2>&1 | tee test-DownloadsTests-testStateMachineTransitions.log
-      - name: Test DownloadsTests.testStats
-        timeout-minutes: 3
-        run: |
-          set -o pipefail
-          swift test -c release --filter DownloadsTests.testStats 2>&1 | tee test-DownloadsTests-testStats.log
+          swift test -c release --filter DownloadTaskStoreTests 2>&1 | tee test-DownloadTaskStoreTests.log
       - name: Test EventBusTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter EventBusTests 2>&1 | tee test-EventBusTests.log
       - name: Test LibraryDNATests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter LibraryDNATests 2>&1 | tee test-LibraryDNATests.log
       - name: Test LibraryEngineTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter LibraryEngineTests 2>&1 | tee test-LibraryEngineTests.log
       - name: Test LyricsPlusTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter LyricsPlusTests 2>&1 | tee test-LyricsPlusTests.log
-      - name: Test PlayerTests
-        timeout-minutes: 6
-        run: |
-          set -o pipefail
-          swift test -c release --filter PlayerTests 2>&1 | tee test-PlayerTests.log
-      - name: Test PolishTests
-        timeout-minutes: 6
-        run: |
-          set -o pipefail
-          swift test -c release --filter PolishTests 2>&1 | tee test-PolishTests.log
-      - name: Test SearchEngineTests
-        timeout-minutes: 6
-        run: |
-          set -o pipefail
-          swift test -c release --filter SearchEngineTests 2>&1 | tee test-SearchEngineTests.log
       - name: Test OSSFeaturesTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter OSSFeaturesTests 2>&1 | tee test-OSSFeaturesTests.log
       - name: Test OSSIntegrationTests
         timeout-minutes: 6
+        continue-on-error: true
         run: |
           set -o pipefail
           swift test -c release --filter OSSIntegrationTests 2>&1 | tee test-OSSIntegrationTests.log
-      - name: Surface compiler/test errors as check annotations
+      - name: Test PlaybackRestorerTests
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter PlaybackRestorerTests 2>&1 | tee test-PlaybackRestorerTests.log
+      - name: Test PlayerTests
+        timeout-minutes: 10
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter PlayerTests 2>&1 | tee test-PlayerTests.log
+      - name: Test PositionClockTests
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter PositionClockTests 2>&1 | tee test-PositionClockTests.log
+      - name: Test PolishTests
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter PolishTests 2>&1 | tee test-PolishTests.log
+      - name: Test SearchEngineTests
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter SearchEngineTests 2>&1 | tee test-SearchEngineTests.log
+      - name: Test ShuffleOrderTests
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter ShuffleOrderTests 2>&1 | tee test-ShuffleOrderTests.log
+      - name: Test SettingsRepositoryTests
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter SettingsRepositoryTests 2>&1 | tee test-SettingsRepositoryTests.log
+
+      # DownloadsTests has wedged at the class level before; per-method
+      # steps keep a hanging case visible in the step list.
+      - name: Test DownloadsTests.testCancel
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testCancel 2>&1 | tee test-DownloadsTests-testCancel.log
+      - name: Test DownloadsTests.testConcurrentLimit
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testConcurrentLimit 2>&1 | tee test-DownloadsTests-testConcurrentLimit.log
+      - name: Test DownloadsTests.testDownloadErrorRetryable
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testDownloadErrorRetryable 2>&1 | tee test-DownloadsTests-testDownloadErrorRetryable.log
+      - name: Test DownloadsTests.testEnqueueAndAllTasks
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testEnqueueAndAllTasks 2>&1 | tee test-DownloadsTests-testEnqueueAndAllTasks.log
+      - name: Test DownloadsTests.testFormattedProgressAndBytes
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testFormattedProgressAndBytes 2>&1 | tee test-DownloadsTests-testFormattedProgressAndBytes.log
+      - name: Test DownloadsTests.testPauseAndResume
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testPauseAndResume 2>&1 | tee test-DownloadsTests-testPauseAndResume.log
+      - name: Test DownloadsTests.testPriorityOrdering
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testPriorityOrdering 2>&1 | tee test-DownloadsTests-testPriorityOrdering.log
+      - name: Test DownloadsTests.testRetryWithBackoff
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testRetryWithBackoff 2>&1 | tee test-DownloadsTests-testRetryWithBackoff.log
+      - name: Test DownloadsTests.testStateMachineTransitions
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testStateMachineTransitions 2>&1 | tee test-DownloadsTests-testStateMachineTransitions.log
+      - name: Test DownloadsTests.testStats
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift test -c release --filter DownloadsTests.testStats 2>&1 | tee test-DownloadsTests-testStats.log
+      - name: Fail the job if any test step failed
+        # BUG-24: the gate. Every test step is `continue-on-error`, so this is
+        # the single place the job goes red — and only after every class has run.
         if: always()
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          logs = sorted(Path('.').glob('swift-build.log')) + sorted(Path('.').glob('test-*.log'))
-          count = 0
-          for log in logs:
-              for line in log.read_text(errors='replace').splitlines():
-                  if re.search(r'\berror:', line) and count < 40:
-                      escaped = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-                      print(f"::error title=Swift diagnostic ({log.name})::{escaped}")
-                      count += 1
-          if count == 0:
-              print("::error title=Swift package job failed::No 'error:' line found in logs; inspect the uploaded diagnostics artifact.")
-          PY
+          set -uo pipefail
+          shopt -s nullglob
+          logs=(test-*.log)
+          if [ ${#logs[@]} -eq 0 ]; then
+            echo "::error title=No test logs::No test-*.log files were produced; the test job did not run."
+            exit 1
+          fi
+          echo "Inspecting ${#logs[@]} test log(s)."
+          if grep -H -E 'error: -\[|Fatal error|Test run with [1-9][0-9]* failure|Exited with [1-9]' "${logs[@]}"; then
+            echo "::error title=Test failures::One or more test classes failed; see the uploaded test-*.log artifacts."
+            exit 1
+          fi
+          echo "No test failure markers found in any class log."
       - name: Upload Swift diagnostics
         if: always()
         uses: actions/upload-artifact@v6
@@ -188,9 +298,46 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Lint
+        id: lint
         run: |
           set -o pipefail
           swiftlint lint 2>&1 | tee swiftlint.log
+      - name: Surface error-severity violations in check annotations
+        # Without this a lint failure is just "exit code 2" with no rule name.
+        # Exit code 2 means at least one error-severity violation; warnings
+        # alone give exit code 0, so anything printed here is a real gate.
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          log = Path("swiftlint.log")
+          lines = log.read_text(errors="replace").splitlines() if log.exists() else []
+          # SwiftLint prints "/path/File.swift:12:34: error: Message (rule_id)".
+          # Older releases put the identifier first; accept both shapes so this
+          # keeps working across the Homebrew upgrade.
+          location = re.compile(r"^(?P<loc>/\S+\.swift:\d+:\d+): (?P<level>error|warning): (?P<rest>.*)$")
+          trailing_rule = re.compile(r"\(([a-z0-9_]+)\)$")
+          found = []
+          for line in lines:
+              m = location.match(line)
+              if not m or m.group("level") != "error":
+                  continue
+              rest = m.group("rest")
+              rule = trailing_rule.search(rest)
+              rule = rule.group(1) if rule else "unknown"
+              found.append((m.group("loc"), rule, rest))
+          for loc, rule, msg in found[:30]:
+              text = f"{loc}: {msg}"
+              print(f"::error title=SwiftLint {rule}::{text}".replace("%", "%25"))
+          if not found:
+              print("::error title=SwiftLint failed::"
+                    "SwiftLint exited non-zero without a parseable error line; "
+                    "see the swiftlint.log artifact.")
+          else:
+              print(f"{len(found)} error-severity violation(s).")
+          PY
       - name: Upload SwiftLint diagnostics
         if: always()
         uses: actions/upload-artifact@v6
@@ -223,7 +370,13 @@ jobs:
           import re
 
           lines = Path("xcodebuild.log").read_text(errors="replace").splitlines()
-          matches = [line for line in lines if re.search(r"\berror:", line)]
+          # BUG-23: only real compiler diagnostics. The previous pattern
+          # (r"\berror:") also matched *source text* echoed by xcodebuild, e.g.
+          # "func adapterDidFail(error: Error)", producing 10 false annotations
+          # and hiding the actual failure.
+          compiler = re.compile(r"^\S+\.swift:\d+:\d+: error:")
+          linker = re.compile(r"^(?:ld|clang|swiftc): error:")
+          matches = [line for line in lines if compiler.match(line) or linker.match(line)]
           for line in matches[:20]:
               escaped = line.replace("%", "%25").replace("\\r", "%0D").replace("\\n", "%0A")
               print(f"::error title=Xcode build diagnostic::{escaped}")
@@ -253,4 +406,72 @@ jobs:
           test -s Docs/RELEASE_FLOW.md
           test -s project.yml
           test -s Package.swift
+          test -s Docs/BRANDING.md
+          test -s App/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
+          test -s App/Resources/Assets.xcassets/BrandLogo.imageset/Contents.json
+          test -s App/Resources/Assets.xcassets/AccentColor.colorset/Contents.json
+          test -s App/Resources/Fonts/OFL-SpaceGrotesk.txt
+          test -f Docs/Branding/qeloryx-lockup-dark.png
           ! grep -R -nE 'TODO\(broken-link\)' README.md Docs
+      - name: Verify brand assets are consistent
+        run: |
+          set -euo pipefail
+          # Every file named in an asset catalog Contents.json must exist, the
+          # 1024 marketing icon must be present, and PNGs must be true PNGs.
+          #
+          # Deliberately dependency-free. The first version of this check used
+          # Pillow to validate size and alpha, which is not installed on
+          # ubuntu-latest, so the step failed with ModuleNotFoundError rather
+          # than a real finding. PNG dimensions and colour type are read from
+          # the IHDR chunk directly — no packages required.
+          python3 - <<'PYEOF'
+          import json, pathlib, struct, sys
+
+          root = pathlib.Path("App/Resources/Assets.xcassets")
+          failures = []
+
+          for contents in sorted(root.rglob("Contents.json")):
+              data = json.loads(contents.read_text())
+              for image in data.get("images", []):
+                  name = image.get("filename")
+                  if name and not (contents.parent / name).exists():
+                      failures.append(f"missing {contents.parent / name}")
+
+          def png_header(path):
+              with open(path, "rb") as fh:
+                  head = fh.read(33)
+              if head[:8] != b"\x89PNG\r\n\x1a\n":
+                  return None
+              width, height = struct.unpack(">II", head[16:24])
+              bit_depth, colour_type = head[24], head[25]
+              return width, height, bit_depth, colour_type
+
+          marketing = root / "AppIcon.appiconset/AppIcon-ios-marketing-1024@1x.png"
+          if not marketing.exists():
+              failures.append("no 1024 marketing icon")
+          else:
+              header = png_header(marketing)
+              if header is None:
+                  failures.append("marketing icon is not a PNG")
+              else:
+                  width, height, depth, colour = header
+                  if (width, height) != (1024, 1024):
+                      failures.append(f"marketing icon is {width}x{height}, want 1024x1024")
+                  # colour type 2 = truecolour (no alpha), 6 = truecolour+alpha
+                  if colour != 2:
+                      failures.append(
+                          f"marketing icon has an alpha channel (PNG colour type {colour}); "
+                          "App Store Connect rejects transparent icons"
+                      )
+                  if depth != 8:
+                      failures.append(f"marketing icon is {depth}-bit, want 8-bit")
+
+          for png in sorted((root / "AppIcon.appiconset").glob("*.png")):
+              if png_header(png) is None:
+                  failures.append(f"{png.name} is not a valid PNG")
+
+          if failures:
+              print("\n".join(failures))
+              sys.exit(1)
+          print("brand assets consistent")
+          PYEOF

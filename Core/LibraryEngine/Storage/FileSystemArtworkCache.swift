@@ -24,8 +24,12 @@ public final class AstryxFileSystemArtworkCache: ArtworkCacheProtocol, @unchecke
         if let dir = cacheDirectory {
             self.cacheDirectory = dir
         } else {
-            // Use caches directory
-            let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            // `first!` crashed on any platform where the caches directory is
+            // unavailable (sandbox misconfiguration, some CI runners). Artwork
+            // is an optimisation, never a reason to terminate the app.
+            let caches = fileManager
+                .urls(for: .cachesDirectory, in: .userDomainMask)
+                .first ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             self.cacheDirectory = caches.appendingPathComponent("com.qeloryx.artwork", isDirectory: true)
         }
         

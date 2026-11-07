@@ -36,6 +36,7 @@ let package = Package(
                 "CapabilityRegistry",
                 "ProviderLayer",
                 "QueueEngine",
+                "Settings",
                 "Shared"
             ],
             swiftSettings: [

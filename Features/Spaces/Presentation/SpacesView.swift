@@ -233,15 +233,17 @@ public final class SpacesViewModel: ObservableObject {
     @Published public var recentReactions: [String] = []
     @Published public var totalListeners: Int = 0
     
+    /// Spaces is not implemented. It starts empty and says so, instead of
+    /// seeding two fake rooms, five fake listeners and three fake reactions
+    /// from invented people (BUG-17). `isFeatureAvailable` lets the UI show a
+    /// "not available yet" state rather than an empty room list.
+    public static let isFeatureAvailable = false
+
     public init() {
-        // Mock data for QEL-051
-        activeSpaces = [
-            AstryxSpace(name: "Late Night Lo-Fi", host: "You", listeners: 3, isActive: true),
-            AstryxSpace(name: "Indie Discovery", host: "Alex", listeners: 5, isActive: true)
-        ]
-        totalListeners = activeSpaces.reduce(0) { $0 + $1.listeners }
-        sharedQueue = [] // Would be populated from queue engine
-        recentReactions = ["❤️ from Alex", "🔥 from Sam", "🎧 from You"]
+        activeSpaces = []
+        totalListeners = 0
+        sharedQueue = []
+        recentReactions = []
     }
     
     public func createSpace() {

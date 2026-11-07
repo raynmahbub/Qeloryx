@@ -5,11 +5,36 @@
 import SwiftUI
 
 public struct DashboardView: View {
-    
+
     @StateObject private var viewModel: DashboardViewModel
-    
-    public init(viewModel: DashboardViewModel = DashboardViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+
+    // Stored, not just used to build the view model: the navigation
+    // destinations in `statsGrid` / `tasteDNAWidget` construct child views that
+    // need the same engines. Previously these existed only as `init` parameters,
+    // so every reference inside `body` was "cannot find in scope".
+    private let libraryEngine: any LibraryEngineProtocol
+    private let downloadEngine: any DownloadEngineProtocol
+    private let tasteEngine: any TasteDNAEngineProtocol
+    private let audioEngine: any AstryxAudioEngineProtocol
+
+    public init(
+        libraryEngine: any LibraryEngineProtocol,
+        downloadEngine: any DownloadEngineProtocol,
+        tasteEngine: any TasteDNAEngineProtocol,
+        audioEngine: any AstryxAudioEngineProtocol
+    ) {
+        self.libraryEngine = libraryEngine
+        self.downloadEngine = downloadEngine
+        self.tasteEngine = tasteEngine
+        self.audioEngine = audioEngine
+        _viewModel = StateObject(
+            wrappedValue: DashboardViewModel(
+                libraryEngine: libraryEngine,
+                downloadEngine: downloadEngine,
+                tasteEngine: tasteEngine,
+                audioEngine: audioEngine
+            )
+        )
     }
     
     public var body: some View {
@@ -63,7 +88,7 @@ public struct DashboardView: View {
     }
     
     private var tasteDNAWidget: some View {
-        NavigationLink(destination: TasteDNAView()) {
+        NavigationLink(destination: TasteDNAView(tasteEngine: tasteEngine, libraryEngine: libraryEngine)) {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
@@ -101,12 +126,50 @@ public struct DashboardView: View {
     
     private var statsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            DashboardCard(title: "Favorites", value: "\(viewModel.favoriteCount)", icon: "heart.fill", color: AstryxColors.sunset, destination: AnyView(LibraryView()))
-            DashboardCard(title: "Recent", value: "\(viewModel.recentCount)", icon: "clock.fill", color: AstryxColors.auroraBlue, destination: AnyView(LibraryView()))
-            DashboardCard(title: "Downloads", value: "\(viewModel.downloadCount)", icon: "arrow.down.circle.fill", color: AstryxColors.emerald, destination: AnyView(DownloadsView()))
-            DashboardCard(title: "Mood", value: viewModel.currentMood, icon: "face.smiling.fill", color: AstryxColors.auroraBlue, destination: AnyView(TasteDNAView()))
-            DashboardCard(title: "Queue", value: "\(viewModel.queueCount)", icon: "music.note.list", color: AstryxColors.Semantic.foregroundSecondary, destination: AnyView(AstryxPlayerView()))
-            DashboardCard(title: "Vinyl", value: "Collection", icon: "opticaldisc.fill", color: AstryxColors.Semantic.foregroundTertiary, destination: AnyView(LibraryView()))
+            DashboardCard(
+                title: "Favorites",
+                value: "\(viewModel.favoriteCount)",
+                icon: "heart.fill",
+                color: AstryxColors.sunset,
+                destination: AnyView(LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine))
+            )
+            DashboardCard(
+                title: "Recent",
+                value: "\(viewModel.recentCount)",
+                icon: "clock.fill",
+                color: AstryxColors.auroraBlue,
+                destination: AnyView(LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine))
+            )
+            DashboardCard(
+                title: "Downloads",
+                value: "\(viewModel.downloadCount)",
+                icon: "arrow.down.circle.fill",
+                color: AstryxColors.emerald,
+                destination: AnyView(DownloadsView(downloadEngine: downloadEngine))
+            )
+            DashboardCard(
+                title: "Mood",
+                value: viewModel.currentMood,
+                icon: "face.smiling.fill",
+                color: AstryxColors.auroraBlue,
+                destination: AnyView(
+                    TasteDNAView(tasteEngine: tasteEngine, libraryEngine: libraryEngine)
+                )
+            )
+            DashboardCard(
+                title: "Queue",
+                value: "\(viewModel.queueCount)",
+                icon: "music.note.list",
+                color: AstryxColors.Semantic.foregroundSecondary,
+                destination: nil
+            )
+            DashboardCard(
+                title: "Vinyl",
+                value: "Collection",
+                icon: "opticaldisc.fill",
+                color: AstryxColors.Semantic.foregroundTertiary,
+                destination: AnyView(LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine))
+            )
         }
     }
     
@@ -200,15 +263,18 @@ public final class DashboardViewModel: ObservableObject {
     private let libraryEngine: any LibraryEngineProtocol
     private let downloadEngine: any DownloadEngineProtocol
     private let tasteEngine: any TasteDNAEngineProtocol
+    private let audioEngine: any AstryxAudioEngineProtocol
     
     public init(
-        libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine(),
-        downloadEngine: any DownloadEngineProtocol = AstryxDownloadEngine(useRealSession: false),
-        tasteEngine: any TasteDNAEngineProtocol = AstryxTasteDNAEngine()
+        libraryEngine: any LibraryEngineProtocol,
+        downloadEngine: any DownloadEngineProtocol,
+        tasteEngine: any TasteDNAEngineProtocol,
+        audioEngine: any AstryxAudioEngineProtocol
     ) {
         self.libraryEngine = libraryEngine
         self.downloadEngine = downloadEngine
         self.tasteEngine = tasteEngine
+        self.audioEngine = audioEngine
         
         // Greeting based on time
         let hour = Calendar.current.component(.hour, from: Date())
@@ -230,7 +296,9 @@ public final class DashboardViewModel: ObservableObject {
         favoriteCount = favorites.count
         recentCount = history.count
         downloadCount = downloads.filter { $0.state == .completed }.count
-        queueCount = 0 // Would come from queue engine
+        // `currentQueue` is a synchronous, view-facing snapshot; only this
+        // read is taken on the main actor after the awaits above.
+        queueCount = audioEngine.currentQueue.count
         
         if let profile = profile {
             currentMood = profile.mood.primary
@@ -238,15 +306,10 @@ public final class DashboardViewModel: ObservableObject {
         }
         
         recentTracks = history
-        
-        // Mock data if empty
-        if favorites.isEmpty && history.isEmpty {
-            favoriteCount = 42
-            recentCount = 12
-            downloadCount = 8
-            queueCount = 5
-            recentTracks = [] // Keep empty for now
-        }
+
+        // An empty library shows zeros and an empty state. It used to report
+        // 42 favourites, 12 recent and 8 downloads out of thin air, which made
+        // a broken import look like a working library (BUG-17).
     }
     
     public func refresh() async {
@@ -277,35 +340,52 @@ private struct DashboardCard: View {
     let value: String
     let icon: String
     let color: Color
-    let destination: AnyView
-    
+    /// Optional: a card with `nil` is a plain, non-navigating tile. The Queue
+    /// card has no destination because `AstryxPlayerView` needs a view model
+    /// carrying an engine pair, event bus and scrobbler that this screen does
+    /// not own — a dangling `AstryxPlayerView()` was the alternative.
+    let destination: AnyView?
+
     var body: some View {
-        NavigationLink(destination: destination) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(.system(size: 18))
-                        .foregroundColor(color)
-                    Spacer()
+        content
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let destination {
+            NavigationLink(destination: destination) { cardBody }
+        } else {
+            cardBody
+        }
+    }
+
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(color)
+                Spacer()
+                if destination != nil {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12))
                         .foregroundColor(AstryxColors.Semantic.foregroundTertiary)
                 }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(value)
-                        .font(AstryxTypography.Heading.h3)
-                        .foregroundColor(AstryxColors.iceWhite)
-                        .lineLimit(1)
-                    Text(title)
-                        .font(AstryxTypography.Body.small)
-                        .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
-                }
             }
-            .padding(14)
-            .background(AstryxColors.Semantic.backgroundSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(AstryxTypography.Heading.h3)
+                    .foregroundColor(AstryxColors.iceWhite)
+                    .lineLimit(1)
+                Text(title)
+                    .font(AstryxTypography.Body.small)
+                    .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
+            }
         }
+        .padding(14)
+        .background(AstryxColors.Semantic.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

@@ -31,25 +31,54 @@ public final class AstryxPlayerViewModel: ObservableObject {
     private let libraryEngine: any LibraryEngineProtocol
     private let eventBus: any EventBusProtocol
     private let scrobbleProvider: any ScrobbleProviderProtocol
+    private let dspEngine: (any DSPEngineProtocol)?
+    private let settings: SettingsRepository?
+    private let playbackRestorer: PlaybackRestorer?
     private let queueFiller = AstryxSmartQueueFiller()
     private var playStartedAt: Date?
     private var subscriptionStore = EventSubscriptionStore()
     private var timer: AnyCancellable?
     private var artworkTransitionTask: Task<Void, Never>?
-    
+
+    /// Engines are injected by the composition root. The defaults are retained
+    /// only for previews/tests; the production path always supplies the graph's
+    /// instances so the UI cannot end up driving a second engine (BUG-19).
     public init(
-        audioEngine: any AstryxAudioEngineProtocol = AstryxAudioEngine(),
-        libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine(),
+        audioEngine: any AstryxAudioEngineProtocol,
+        libraryEngine: any LibraryEngineProtocol,
         eventBus: any EventBusProtocol = AstryxEventBus.shared,
-        scrobbleProvider: any ScrobbleProviderProtocol = AstryxScrobbleProvider()
+        scrobbleProvider: any ScrobbleProviderProtocol = AstryxScrobbleProvider(),
+        dspEngine: (any DSPEngineProtocol)? = nil,
+        settings: SettingsRepository? = nil,
+        playbackRestorer: PlaybackRestorer? = nil
     ) {
         self.audioEngine = audioEngine
         self.libraryEngine = libraryEngine
         self.eventBus = eventBus
         self.scrobbleProvider = scrobbleProvider
+        self.dspEngine = dspEngine
+        self.settings = settings
+        self.playbackRestorer = playbackRestorer
         observeEvents()
         startPositionTimer()
         refreshQueue()
+    }
+
+    // MARK: - Audio Lab access
+    //
+    // The player exposes the single DSP instance so the Audio Lab binds to the
+    // same object the engine will apply. Before this, `AudioLabView` created its
+    // own `AstryxDSPEngine()` and its sliders changed nothing (BUG-07).
+    public var equalizer: (any EqualizerProtocol)? { dspEngine?.equalizer }
+
+    public func setCrossfade(seconds: Double) {
+        settings?.setCrossfadeSeconds(seconds)
+        Task { await settings?.applyAudioSettings(to: audioEngine) }
+    }
+
+    /// Snapshots the resume point. Called on backgrounding and before teardown.
+    public func captureResumePoint() {
+        playbackRestorer?.capture(from: audioEngine)
     }
     
     private func observeEvents() {
@@ -88,21 +117,12 @@ public final class AstryxPlayerViewModel: ObservableObject {
         }
         previousArtworkData = currentArtworkData
         isArtworkTransitioning = true
-        if let track = try? await libraryEngine.fetchTrack(id: trackID) {
-            currentTrack = track
-            currentArtworkData = track.artworkData
-            await refreshUpNext()
-        } else {
-            currentTrack = AstryxTrack(
-                id: trackID,
-                title: "Track \(trackID.prefix(8))",
-                artist: "Unknown Artist",
-                album: "Unknown Album",
-                duration: duration,
-                fileURL: URL(fileURLWithPath: "/tmp/\(trackID).mp3"),
-                fileFormat: .mp3
-            )
-        }
+        // An unresolvable track is reported as such. The previous code
+        // fabricated a `/tmp/<id>.mp3` track and displayed "Track ab12cd34",
+        // which hid the real failure from the listener (BUG-02/BUG-19).
+        currentTrack = try? await libraryEngine.fetchTrack(id: trackID)
+        currentArtworkData = currentTrack?.artworkData
+        await refreshUpNext()
         artworkTransitionTask?.cancel()
         artworkTransitionTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)

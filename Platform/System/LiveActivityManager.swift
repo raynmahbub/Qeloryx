@@ -47,7 +47,15 @@ public final class AstryxLiveActivityManager: LiveActivityManagerProtocol, @unch
     public func startLiveActivity(track: AstryxTrack, isPlaying: Bool, position: TimeInterval) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let attributes = AstryxPlaybackAttributes(trackID: track.id)
-        let state = AstryxPlaybackAttributes.ContentState(trackTitle: track.title, artist: track.artist, album: track.album, artworkData: track.artworkData, isPlaying: isPlaying, position: position, duration: track.duration)
+        let state = AstryxPlaybackAttributes.ContentState(
+            trackTitle: track.title,
+            artist: track.artist,
+            album: track.album,
+            artworkData: track.artworkData,
+            isPlaying: isPlaying,
+            position: position,
+            duration: track.duration
+        )
         do {
             lock.lock()
             if let existing = currentActivity { Task { await existing.end(dismissalPolicy: .immediate) } }
@@ -59,7 +67,15 @@ public final class AstryxLiveActivityManager: LiveActivityManagerProtocol, @unch
     public func updateLiveActivity(track: AstryxTrack?, isPlaying: Bool, position: TimeInterval, duration: TimeInterval?) {
         guard let activity = currentActivity else { return }
         let dur = duration ?? track?.duration ?? 0
-        let newState = AstryxPlaybackAttributes.ContentState(trackTitle: track?.title ?? activity.contentState.trackTitle, artist: track?.artist ?? activity.contentState.artist, album: track?.album ?? activity.contentState.album, artworkData: track?.artworkData ?? activity.contentState.artworkData, isPlaying: isPlaying, position: position, duration: dur)
+        let newState = AstryxPlaybackAttributes.ContentState(
+            trackTitle: track?.title ?? activity.contentState.trackTitle,
+            artist: track?.artist ?? activity.contentState.artist,
+            album: track?.album ?? activity.contentState.album,
+            artworkData: track?.artworkData ?? activity.contentState.artworkData,
+            isPlaying: isPlaying,
+            position: position,
+            duration: dur
+        )
         Task { await activity.update(using: newState) }
     }
     public func endLiveActivity() {

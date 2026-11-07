@@ -8,8 +8,8 @@ public struct DownloadsView: View {
     
     @StateObject private var viewModel: DownloadsViewModel
     
-    public init(viewModel: DownloadsViewModel = DownloadsViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+    public init(downloadEngine: any DownloadEngineProtocol) {
+        _viewModel = StateObject(wrappedValue: DownloadsViewModel(downloadEngine: downloadEngine))
     }
     
     public var body: some View {

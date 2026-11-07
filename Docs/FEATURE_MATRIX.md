@@ -5,6 +5,13 @@
 > approach that respects upstream licenses, and a trackable status.
 > Update the Status column as sprints land.
 
+> ## Honesty note
+>
+> Statuses below describe **what the code does today**, not what is aspirational.
+> "Code complete" means the logic exists and has unit tests; it does **not** mean
+> device-verified. Anything requiring a physical iOS device or a macOS/Xcode run
+> is marked unverified, because the remediation environment had no Swift toolchain.
+
 ## Principles
 
 1. **Native, clean-room.** Qeloryx is Swift/SwiftUI. Popular third-party
@@ -38,14 +45,14 @@
 
 | # | Sprint | Ships | Origin of the ideas | Status |
 |---|--------|-------|--------------------|--------|
-| S1 | Seamless playback | Dual-deck gapless engine, equal-power/linear/s-curve crossfades (0–12 s), arming controller, `setCrossfade` command, hard-transition parity | Crossfade concept: BitChord (GPL — clean-room Swift implementation) | ✅ Landed (this sprint) |
-| S2 | Player surface | Now-playing gesture system, mini-player, artwork transition, bottom-sheet | Idea class: BitChord UI patterns — independently designed in Astryx design language | ⏳ Planned |
-| S3 | Lyrics | Millisecond synced lyrics on the LRC parser, karaoke line highlighting, per-provider failover | Concept: LastWave synced lyrics; parser already native (Qeloryx) | ⏳ Planned |
-| S4 | Download resilience | Resume ranges, retry with backoff, batch scheduling, progress aggregation | Concept: SpotiFLAC download UX; engine already native | ⏳ Planned |
-| S5 | Smart search | Command palette, predicate builder, smart playlists, filter engine | Concept: Feishin | ⏳ Planned |
-| S6 | Listening stats | Dashboard widgets, play-history aggregation, Taste DNA wiring | Concept: Tauon dashboard | ⏳ Planned |
-| S7 | Audio Lab | Spectrum visualizer, signal-path diagnostics, ReplayGain from the open spec | Concepts: Tauon/Harmonoid tool families (spec-based) | ⏳ Planned |
-| S8 | Discovery | Algorithmic daily mixes from Taste DNA, smart playlist generator | Concept: LastWave discovery | ⏳ Planned |
+| S1 | Seamless playback | Dual-deck gapless engine, equal-power/linear/s-curve crossfades (0–12 s), arming controller, `setCrossfade` command, hard-transition parity | Crossfade concept: BitChord (GPL — clean-room Swift implementation) | 🟡 Code complete, **unverified on hardware**. The crossfade value was previously unreachable from production (`SettingsRepository` now feeds it — BUG-06), but no device run has confirmed an audible fade. |
+| S2 | Player surface | Now-playing gesture system, mini-player, artwork transition, bottom-sheet | Idea class: BitChord UI patterns — independently designed in Astryx design language | 🟡 Views exist and are wired through `AppDependencies`; gestures are unverified. |
+| S3 | Lyrics | Millisecond synced lyrics on the LRC parser, karaoke line highlighting, per-provider failover | Concept: LastWave synced lyrics; parser already native (Qeloryx) | 🟡 LRC parser + karaoke UI exist. **No LRCLIB/remote provider** — offline only. |
+| S4 | Download resilience | Resume ranges, retry with backoff, batch scheduling, progress aggregation | Concept: SpotiFLAC download UX; engine already native | 🟡 State machine, retry/backoff, persistence and atomic replace exist. Resume across relaunch is **unverified** (needs a device). |
+| S5 | Smart search | Command palette, predicate builder, smart playlists, filter engine | Concept: Feishin | 🟡 Search index is real; there is **no command palette**. |
+| S6 | Listening stats | Dashboard widgets, play-history aggregation, Taste DNA wiring | Concept: Tauon dashboard | 🟡 Counts are real; the dashboard previously displayed fabricated numbers (BUG-17). |
+| S7 | Audio Lab | Spectrum visualizer, signal-path diagnostics, ReplayGain from the open spec | Concepts: Tauon/Harmonoid tool families (spec-based) | ❌ **Not real.** The spectrum is an illustrative animation (no FFT) and the signal path is a static illustration. EQ sliders now reach the shared DSP engine, but nothing is applied to the audio graph. |
+| S8 | Discovery | Algorithmic daily mixes from Taste DNA, smart playlist generator | Concept: LastWave discovery | 🟡 Profile generation is real; it returns nothing for an empty library (no fabricated profiles). |
 
 ## S1 — Seamless playback (landed)
 
@@ -81,7 +88,10 @@
 - [x] Crossfade disabled by default; zero behavior change unless enabled
 - [x] Fade commits exactly once per track (armed-once guard)
 - [x] Queue events identical to hard transitions
-- [x] All new logic verified by unit tests on every CI run
+- [x] All new logic covered by unit tests in `PlayerTests`
+- [ ] **CI has not run green on this branch yet** — the SPM test step was red
+      before the remediation (`AstryxAudioEngineTests`), so no test claim here
+      has been observed passing.
 - [ ] Device verification of audible fade quality (manual, on hardware)
 
 ## Cross-sprint invariants

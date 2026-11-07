@@ -337,7 +337,7 @@ public final class AstryxTasteDNAEngine: TasteDNAEngineProtocol, @unchecked Send
         
         // Rediscover — tracks not played in long time but high playCount historically
         let rediscover = library.filter { track in
-            track.playCount > 5 && (track.lastPlayed == nil || track.lastPlayed! < Date().addingTimeInterval(-30*24*3600))
+            track.playCount > 5 && track.lastPlayed.map { $0 < Date().addingTimeInterval(-30*24*3600) } == true
         }.sorted { $0.playCount > $1.playCount }.prefix(limit)
         
         if !rediscover.isEmpty {

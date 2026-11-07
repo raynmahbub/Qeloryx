@@ -37,7 +37,10 @@ public struct AstryxTrack: Identifiable, Sendable, Equatable, Hashable {
     public var lyrics: String?
     public var lrcURL: URL?
     public var folderPath: String?
-    public var checksum: String? // For duplicate detection
+    public var checksum: String? // Content fingerprint for duplicate detection
+    /// Owning library. Previously tracked only in the storage layer, which made
+    /// per-library queries impossible (BUG-01 follow-on).
+    public var libraryID: String?
     
     public init(
         id: String = UUID().uuidString,
@@ -67,7 +70,8 @@ public struct AstryxTrack: Identifiable, Sendable, Equatable, Hashable {
         lyrics: String? = nil,
         lrcURL: URL? = nil,
         folderPath: String? = nil,
-        checksum: String? = nil
+        checksum: String? = nil,
+        libraryID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -97,6 +101,7 @@ public struct AstryxTrack: Identifiable, Sendable, Equatable, Hashable {
         self.lrcURL = lrcURL
         self.folderPath = folderPath
         self.checksum = checksum
+        self.libraryID = libraryID
     }
     
     // MARK: Computed
@@ -168,7 +173,31 @@ public enum AudioFormat: String, Sendable, CaseIterable, Equatable, Hashable {
         return .unknown
     }
     
+    /// Formats the current audio path can actually decode on Apple platforms.
+    /// Ogg Vorbis and Opus are modelled (so imported files are identified and
+    /// reported) but are deliberately excluded here: AVFoundation cannot
+    /// decode them without a bundled decoder, and advertising them was a false
+    /// capability claim (BUG-21).
     public static var supportedFormats: [AudioFormat] {
-        [.mp3, .aac, .m4a, .alac, .flac, .wav, .aiff, .ogg, .opus]
+        [.mp3, .aac, .m4a, .alac, .flac, .wav, .aiff]
+    }
+
+    /// Formats recognised by the scanner but not playable yet.
+    public static var recognisedButUndecodableFormats: [AudioFormat] {
+        [.ogg, .opus]
+    }
+
+    /// True when the built-in AVFoundation path can decode this container.
+    public var isDecodable: Bool {
+        AudioFormat.supportedFormats.contains(self)
+    }
+
+    /// Human-readable reason a file is indexed but cannot be played.
+    public var unsupportedReason: String? {
+        switch self {
+        case .ogg: return "Ogg Vorbis requires an external decoder."
+        case .opus: return "Opus requires an external decoder."
+        default: return nil
+        }
     }
 }

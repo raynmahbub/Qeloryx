@@ -54,7 +54,7 @@ public final class SearchViewModel: ObservableObject {
     private let performanceMonitor = AstryxPerformanceMonitor.shared
     
     public init(
-        searchEngine: any SearchEngineProtocol = AstryxSearchEngine(),
+        searchEngine: any SearchEngineProtocol,
         eventBus: any EventBusProtocol = AstryxEventBus.shared
     ) {
         self.searchEngine = searchEngine

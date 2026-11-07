@@ -5,7 +5,28 @@
 import SwiftUI
 import Combine
 
-public enum AppRoute: Hashable, Sendable {
+public enum AppRoute: Hashable, Sendable, Identifiable {
+    /// Stable identity for `sheet(item:)`. One destination per route kind, so
+    /// opening a different album replaces the sheet instead of stacking.
+    public var id: String {
+        switch self {
+        case .library: return "library"
+        case .search: return "search"
+        case .discovery: return "discovery"
+        case .dashboard: return "dashboard"
+        case .downloads: return "downloads"
+        case .player(let trackID): return "player-\(trackID)"
+        case .album(let id): return "album-\(id)"
+        case .artist(let id): return "artist-\(id)"
+        case .settings: return "settings"
+        case .audioLab: return "audioLab"
+        case .tasteDNA: return "tasteDNA"
+        case .spaces: return "spaces"
+        case .timeCapsule: return "timeCapsule"
+        case .lyrics(let id): return "lyrics-\(id)"
+        }
+    }
+
     case library
     case search
     case discovery
@@ -26,7 +47,12 @@ public enum AppRoute: Hashable, Sendable {
 public final class AppCoordinator: ObservableObject {
     
     @Published public var selectedTab: AppTab = .library
-    @Published public var navigationPath = NavigationPath()
+    /// Routes that are not a tab. Presented as a sheet from `RootView`.
+    ///
+    /// This replaced a `@Published var navigationPath = NavigationPath()`
+    /// that was appended to and never read by any view, so `navigate(to:
+    /// .settings)` silently did nothing (BUG-18).
+    @Published public var presentedRoute: AppRoute?
     @Published public var isPlayerPresented = false
     @Published public var currentTrackID: String?
     
@@ -68,8 +94,8 @@ public final class AppCoordinator: ObservableObject {
             case .player(let trackID):
                 currentTrackID = trackID
                 isPlayerPresented = true
-            case .album, .artist, .settings, .audioLab, .tasteDNA, .spaces, .timeCapsule, .lyrics:
-                navigationPath.append(route)
+            case .album(_), .artist(_), .settings, .audioLab, .tasteDNA, .spaces, .timeCapsule, .lyrics(_):
+                presentedRoute = route
             }
         }
         AstryxHapticEngine.shared.triggerTabChange()
@@ -85,6 +111,19 @@ public final class AppCoordinator: ObservableObject {
     
     public func dismissPlayer() {
         isPlayerPresented = false
+    }
+
+    public func dismissRoute() {
+        presentedRoute = nil
+    }
+
+    /// Seeds `currentTrackID` from whatever is already playing. Called once
+    /// when the root appears, so a restored queue (or a relaunch mid-track)
+    /// shows the mini player without waiting for the next `trackStarted`.
+    public func refreshFromEngine(engine: (any AstryxAudioEngineProtocol)? = nil) async {
+        if let trackID = engine?.playbackState.currentTrackID {
+            currentTrackID = trackID
+        }
     }
 }
 

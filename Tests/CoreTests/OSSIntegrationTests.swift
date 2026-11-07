@@ -3,7 +3,14 @@
 // Tests for second OSS benchmark batch: scrobbling, smart queue, tag editor, bit-perfect output
 
 import XCTest
+#if canImport(QeloryxCore)
 @testable import QeloryxCore
+#else
+// The XcodeGen app target is a single module named `Qeloryx` (App + Core +
+// Features + Platform + DesignSystem compiled together), so `QeloryxCore` does
+// not exist there. `swift test` uses the multi-module SPM targets above.
+@testable import Qeloryx
+#endif
 
 final class OSSIntegrationTests: XCTestCase {
     

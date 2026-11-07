@@ -2,7 +2,11 @@
 // AstryxColorsTests.swift
 
 import XCTest
+#if canImport(QeloryxDesignSystem)
 @testable import QeloryxDesignSystem
+#else
+@testable import Qeloryx
+#endif
 import SwiftUI
 
 final class AstryxColorsTests: XCTestCase {
@@ -15,9 +19,9 @@ final class AstryxColorsTests: XCTestCase {
         _ = AstryxColors.sunset
         _ = AstryxColors.iceWhite
         
-        _ = AstryxColors.Midnight._900
-        _ = AstryxColors.Midnight._800
-        _ = AstryxColors.Aurora._500
+        _ = AstryxColors.Midnight.tone900
+        _ = AstryxColors.Midnight.tone800
+        _ = AstryxColors.Aurora.tone500
         _ = AstryxColors.Semantic.background
         _ = AstryxColors.Semantic.foreground
     }

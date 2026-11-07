@@ -2,7 +2,14 @@
 // AstryxAudioEngineTests.swift
 
 import XCTest
+#if canImport(QeloryxCore)
 @testable import QeloryxCore
+#else
+// The XcodeGen app target is a single module named `Qeloryx` (App + Core +
+// Features + Platform + DesignSystem compiled together), so `QeloryxCore` does
+// not exist there. `swift test` uses the multi-module SPM targets above.
+@testable import Qeloryx
+#endif
 
 final class AstryxAudioEngineTests: XCTestCase {
     
@@ -14,9 +21,29 @@ final class AstryxAudioEngineTests: XCTestCase {
         super.setUp()
         eventBus = AstryxEventBus()
         queueController = AstryxQueueController(eventBus: eventBus)
-        engine = AstryxAudioEngine(queueController: queueController, eventBus: eventBus)
+        // BUG-02: without a resolver the engine now (correctly) refuses to
+        // claim it is playing. Tests supply a deterministic one.
+        engine = AstryxAudioEngine(
+            queueController: queueController,
+            eventBus: eventBus,
+            sourceResolver: Self.resolver(for: ["track-1", "track-2", "track-3"])
+        )
     }
     
+    static func resolver(for trackIDs: [String]) -> DictionaryPlaybackSourceResolver {
+        DictionaryPlaybackSourceResolver(tracks: trackIDs.map { id in
+            AstryxTrack(
+                id: id,
+                title: "Track \(id)",
+                artist: "Artist",
+                album: "Album",
+                duration: 180,
+                fileURL: URL(fileURLWithPath: "/library/\(id).m4a"),
+                fileFormat: .m4a
+            )
+        })
+    }
+
     override func tearDown() {
         eventBus.removeAllObservers()
         super.tearDown()
@@ -65,8 +92,6 @@ final class AstryxAudioEngineTests: XCTestCase {
     func testShuffle() async throws {
         let trackIDs = ["track-1", "track-2", "track-3", "track-4", "track-5"]
         try await engine.handle(command: .playQueue(queue: trackIDs, startIndex: 0))
-        
-        let originalOrder = engine.currentQueue.items.map { $0.trackID }
         
         try await engine.handle(command: .setShuffle(true))
         XCTAssertTrue(engine.currentQueue.shuffleEnabled)

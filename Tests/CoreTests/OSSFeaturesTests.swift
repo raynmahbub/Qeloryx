@@ -3,7 +3,14 @@
 // Tests for OSS-benchmarked features: ReplayGain, gapless/crossfade, smart playlists, M3U
 
 import XCTest
+#if canImport(QeloryxCore)
 @testable import QeloryxCore
+#else
+// The XcodeGen app target is a single module named `Qeloryx` (App + Core +
+// Features + Platform + DesignSystem compiled together), so `QeloryxCore` does
+// not exist there. `swift test` uses the multi-module SPM targets above.
+@testable import Qeloryx
+#endif
 
 final class OSSFeaturesTests: XCTestCase {
     

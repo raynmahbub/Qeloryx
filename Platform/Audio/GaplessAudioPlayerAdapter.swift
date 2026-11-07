@@ -23,7 +23,7 @@ import AVFoundation
 public final class GaplessAudioPlayerAdapter: AudioPlayerAdapterProtocol,
     CrossfadeCapableAudioPlayer, @unchecked Sendable {
 
-    public weak var delegate: AVFoundationAdapterDelegate?
+    public weak var delegate: (any AVFoundationAdapterDelegate)?
 
     private let lock = NSLock()
 
@@ -332,7 +332,11 @@ public final class GaplessAudioPlayerAdapter: AudioPlayerAdapterProtocol,
         ) { [weak self] _ in
             guard let self = self else { return }
             self.lock.lock()
-            let shouldNotify = isStandby ? (self.standbyPlayer === nil && !self.isCrossfading) : !self.isCrossfading
+            // A standby deck that finishes by itself must never advance the
+            // queue: its notification is always swallowed. The active deck
+            // reports natural completion unless we are mid-fade (the retiring
+            // deck's end must not double-advance the queue either).
+            let shouldNotify = !isStandby && !self.isCrossfading
             self.lock.unlock()
             // Natural finish only matters for the deck that is still active
             // and not being faded out; a retiring deck is silenced by the

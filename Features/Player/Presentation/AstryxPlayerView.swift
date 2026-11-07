@@ -11,7 +11,10 @@ public struct AstryxPlayerView: View {
     @State private var showAirPlay = false
     @Environment(\.dismiss) private var dismiss
     
-    public init(viewModel: AstryxPlayerViewModel = AstryxPlayerViewModel()) {
+    /// No default view model: `AstryxPlayerViewModel` requires an audio and a
+    /// library engine, and defaulting to a freshly built one was precisely the
+    /// "every view owns its own engine" bug this branch removed (BUG-19).
+    public init(viewModel: AstryxPlayerViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
     
@@ -294,7 +297,11 @@ private struct AirPlayView: View {
             VStack(spacing: AstryxSpacing.lg) {
                 Image(systemName: "airplayaudio").font(.system(size: 48)).foregroundColor(AstryxColors.auroraBlue)
                 Text("AirPlay").font(AstryxTypography.Heading.h3)
-                Text("Stream to HomePod, Apple TV, and AirPlay-enabled speakers").font(AstryxTypography.Body.small).multilineTextAlignment(.center).foregroundColor(AstryxColors.Semantic.foregroundSecondary).padding(.horizontal)
+                Text("Stream to HomePod, Apple TV, and AirPlay-enabled speakers")
+                    .font(AstryxTypography.Body.small)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
+                    .padding(.horizontal)
                 AstryxButton(title: "Open AirPlay", style: .secondary, icon: "airplayaudio") {}
                     .padding(.horizontal, AstryxSpacing.xl)
                 Spacer()

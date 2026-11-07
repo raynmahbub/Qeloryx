@@ -3,7 +3,14 @@
 // QEL-032 Lyrics++ — LRC, Synced, Karaoke, Translation-ready, Fullscreen
 
 import XCTest
+#if canImport(QeloryxCore)
 @testable import QeloryxCore
+#else
+// The XcodeGen app target is a single module named `Qeloryx` (App + Core +
+// Features + Platform + DesignSystem compiled together), so `QeloryxCore` does
+// not exist there. `swift test` uses the multi-module SPM targets above.
+@testable import Qeloryx
+#endif
 
 final class LyricsPlusTests: XCTestCase {
     

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Docs/Branding/qeloryx-lockup-dark.png" alt="Qeloryx — aurora Q mark with Space Grotesk wordmark" width="560">
+</p>
+
 # Qeloryx
 
 **Hear Beyond. Build Beyond.**
@@ -19,6 +23,32 @@ Qeloryx is an iOS music-player project built around an offline-first library, pl
 ## Features in development
 
 The codebase includes playback and queue components (with gapless/crossfade planning and ReplayGain normalization), library and metadata handling (with smart playlists and M3U playlist import/export), indexed search, lyrics models, download workflows, Taste DNA/recommendation components, a design system, and iOS platform adapters. Some screens and data paths are prototypes or use sample data; feature presence in source does not imply production readiness or a completed end-to-end user experience. Feature ideas are benchmarked against top open-source music players — see [Docs/SHM/SHM-009](Docs/SHM/SHM-009-oss-feature-benchmark.md) and [Docs/SHM/SHM-010](Docs/SHM/SHM-010-oss-master-list.md).
+
+## Branding
+
+The app icon, the aurora **Q** mark, and the wordmark lockups are all generated
+from the same source of truth as the interface: the Midnight Aurora tokens in
+`DesignSystem/Theme/AstryxColors.swift`.
+
+| Asset | Path |
+|---|---|
+| App icon (all iOS sizes, 1024 marketing) | `App/Resources/Assets.xcassets/AppIcon.appiconset` |
+| In-app mark | `App/Resources/Assets.xcassets/BrandLogo.imageset` |
+| Accent colour (`#3B82F6`) | `App/Resources/Assets.xcassets/AccentColor.colorset` |
+| Lockups and brand sheet | `Docs/Branding/` |
+| Logo typeface (Space Grotesk, OFL-1.1) | `App/Resources/Fonts/` |
+
+Regenerate everything after any palette change:
+
+```sh
+python3 -m pip install Pillow
+python3 Tools/branding/build_brand_assets.py
+```
+
+The generator draws at 4x and downsamples, so the mark is identical at 20 px and
+at 1024 px. Do not hand-edit the PNGs — they are build output, and the next
+regeneration will overwrite them. Usage rules and the palette are documented in
+[`Docs/BRANDING.md`](Docs/BRANDING.md).
 
 ## Requirements
 

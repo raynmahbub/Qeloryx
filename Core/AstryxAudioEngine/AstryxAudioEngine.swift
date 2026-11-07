@@ -1,6 +1,18 @@
 // QELORYX — AstryxAudioEngine
 // AstryxAudioEngine.swift
-// QEL-012 Player Milestone — Production implementation with AVFoundation, Now Playing, Live Activity, Haptics, AirPlay
+//
+// Core playback orchestration. Split across extensions to keep each type body
+// readable:
+//   • AstryxAudioEngine.swift          — state, transport, session
+//   • AstryxAudioEngine+Position.swift — the position clock
+//   • AstryxAudioEngine+Actions.swift  — next/previous/crossfade/queue
+//   • AstryxAudioEngine+Delegate.swift — adapter delegate + remote commands
+//
+// Correctness notes (see Docs/BUG_REGISTER.md):
+//   BUG-02 no invented `/tmp` URLs and no swallowed load failures.
+//   BUG-03 the position clock never advances unless the adapter is playing.
+//   BUG-05 interruptions require that we were playing; route loss pauses.
+//   BUG-11 repeat-one seeks to zero instead of reloading the file.
 
 import Foundation
 
@@ -8,33 +20,65 @@ public protocol AstryxAudioEngineProtocol: AnyObject, Sendable {
     var playbackState: AstryxPlaybackState { get }
     var currentQueue: AstryxQueue { get }
     func handle(command: AstryxPlaybackCommand) async throws
+    /// Replaces the queue without loading or playing anything.
+    func restoreQueue(trackIDs: [String], startIndex: Int) async
+    /// Restores a paused position without touching the audio adapter.
+    ///
+    /// Part of the protocol so queue restoration cannot silently vanish behind
+    /// an `as?` cast when the engine implementation is substituted.
+    func restorePausedState(trackID: String, position: TimeInterval)
     func currentTrack() async -> AstryxTrack?
     func seek(to: TimeInterval) async throws
     func setVolume(_ volume: Float) async throws
 }
 
 public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Sendable {
-    
-    private let queueController: any QueueControllerProtocol
-    private let sessionManager: any AudioSessionManagerProtocol
-    private let eventBus: any EventBusProtocol
-    private let libraryEngine: (any LibraryEngineProtocol)?
-    private let nowPlayingManager: any NowPlayingManagerProtocol
-    private let liveActivityManager: any LiveActivityManagerProtocol
-    private let hapticEngine: any HapticEngineProtocol
-    private let avAdapter: any AudioPlayerAdapterProtocol
-    
+
+    // MARK: Dependencies
+
+    let queueController: any QueueControllerProtocol
+    let sessionManager: any AudioSessionManagerProtocol
+    let eventBus: any EventBusProtocol
+    let libraryEngine: (any LibraryEngineProtocol)?
+    let nowPlayingManager: any NowPlayingManagerProtocol
+    let liveActivityManager: any LiveActivityManagerProtocol
+    let hapticEngine: any HapticEngineProtocol
+    let avAdapter: any AudioPlayerAdapterProtocol
+    let sourceResolver: (any PlaybackSourceResolving)?
+
+    // MARK: State
+
     private var _playbackState: AstryxPlaybackState = .idle
-    private let stateLock = NSLock()
-    private var positionTimer: Timer?
-    private var currentTrackCache: AstryxTrack?
-    private var subscriptionStore = EventSubscriptionStore()
-    private var crossfadeConfiguration = CrossfadeConfiguration.disabled
-    private let transitionController = GaplessTransitionController()
+    let stateLock = NSLock()
+    var positionTimer: Timer?
+    var currentTrackCache: AstryxTrack?
+    var subscriptionStore = EventSubscriptionStore()
+    var crossfadeConfiguration = CrossfadeConfiguration.disabled
+    let transitionController = GaplessTransitionController()
+
     /// Track ID whose crossfade is already committed, so the position timer
     /// arms exactly once per track and never races itself.
-    private var transitionArmedTrackID: String?
-    
+    var transitionArmedTrackID: String?
+
+    /// Track whose play has already been counted in this playback session, so
+    /// a single listen increments the counter exactly once (BUG-20).
+    var playRecordedTrackID: String?
+
+    /// Last whole second pushed to Now Playing / Live Activity, so system
+    /// surfaces update at 1 Hz instead of on every tick.
+    var lastNowPlayingSecond: Int = -1
+
+    /// True when playback was running at the moment the system interrupted us.
+    /// Resume only happens when this is set, so a user who had paused is never
+    /// surprised by audio after a phone call.
+    var wasPlayingBeforeInterruption = false
+
+    /// Wall-clock length of one position timer tick. Also used as the fallback
+    /// increment so a track still advances if the adapter reports nothing.
+    static let positionTickInterval: TimeInterval = 0.5
+
+    // MARK: Init
+
     public init(
         queueController: any QueueControllerProtocol = AstryxQueueController(),
         sessionManager: any AudioSessionManagerProtocol = FallbackAudioSessionManager(),
@@ -43,7 +87,8 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
         nowPlayingManager: any NowPlayingManagerProtocol = FallbackNowPlayingManager(),
         liveActivityManager: any LiveActivityManagerProtocol = FallbackLiveActivityManager(),
         hapticEngine: any HapticEngineProtocol = FallbackHapticEngine(),
-        avAdapter: any AudioPlayerAdapterProtocol = FallbackAudioPlayerAdapter()
+        avAdapter: any AudioPlayerAdapterProtocol = FallbackAudioPlayerAdapter(),
+        sourceResolver: (any PlaybackSourceResolving)? = nil
     ) {
         self.queueController = queueController
         self.sessionManager = sessionManager
@@ -53,21 +98,40 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
         self.liveActivityManager = liveActivityManager
         self.hapticEngine = hapticEngine
         self.avAdapter = avAdapter
+        if let sourceResolver {
+            self.sourceResolver = sourceResolver
+        } else if let libraryEngine {
+            self.sourceResolver = LibraryPlaybackSourceResolver(library: libraryEngine)
+        } else {
+            self.sourceResolver = nil
+        }
         self.avAdapter.delegate = self
         observeEvents()
         setupNowPlayingHandler()
     }
-    
+
+    // MARK: - Observable state
+
     public var playbackState: AstryxPlaybackState {
         stateLock.lock()
         defer { stateLock.unlock() }
         return _playbackState
     }
-    
+
     public var currentQueue: AstryxQueue {
         queueController.currentQueue()
     }
-    
+
+    func setState(_ newState: AstryxPlaybackState) -> AstryxPlaybackState {
+        stateLock.lock()
+        _playbackState = newState
+        let state = _playbackState
+        stateLock.unlock()
+        return state
+    }
+
+    // MARK: - Command routing
+
     public func handle(command: AstryxPlaybackCommand) async throws {
         switch command {
         case .play(let trackID):
@@ -93,21 +157,29 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
         case .setShuffle(let enabled):
             await queueController.setShuffle(enabled)
             hapticEngine.trigger(.selection)
+            publishState()
         case .setRepeat(let mode):
             await queueController.setRepeatMode(mode)
             hapticEngine.trigger(.selection)
+            publishState()
         case .setVolume(let volume):
             try await setVolume(volume)
         case .setCrossfade(let configuration):
             crossfadeConfiguration = configuration
+            // Changing the fade window invalidates any armed transition.
+            transitionArmedTrackID = nil
         }
     }
-    
-    private func play(trackID: String?) async throws {
+
+    // MARK: - Transport
+
+    /// `internal` so the delegate / remote-command extension can resume
+    /// playback after an interruption.
+    func play(trackID: String?) async throws {
         try sessionManager.configure(category: .playback)
         try sessionManager.activate()
-        
-        if let trackID = trackID {
+
+        if let trackID {
             let queue = currentQueue
             if let index = queue.items.firstIndex(where: { $0.trackID == trackID }) {
                 await queueController.setCurrentIndex(index)
@@ -115,89 +187,107 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
                 await queueController.setQueue(trackIDs: [trackID], startIndex: 0, source: .manual)
             }
             try await startPlayback(trackID: trackID)
-        } else {
-            if case .paused(let id, _, _) = playbackState {
-                try await resumePlayback(trackID: id)
-            } else if let current = currentQueue.currentItem {
-                try await startPlayback(trackID: current.trackID)
-            } else if let first = currentQueue.items.first {
-                try await startPlayback(trackID: first.trackID)
-            }
+            return
+        }
+
+        switch playbackState {
+        case .paused(let id, _, _):
+            try await resumePlayback(trackID: id)
+        case .failed(let id?, _):
+            // Retrying a failed track must re-load it, not pretend to resume.
+            try await startPlayback(trackID: id)
+        default:
+            guard !currentQueue.isEmpty else { throw PlaybackError.nothingToResume }
+            let id = currentQueue.currentItem?.trackID ?? currentQueue.items[0].trackID
+            try await startPlayback(trackID: id)
         }
     }
-    
+
     private func pause() async throws {
-        stateLock.lock()
-        let previousState = _playbackState
-        stateLock.unlock()
-        guard case .playing(let trackID, let pos, let dur) = previousState else { return }
+        guard case .playing(let trackID, let pos, let dur) = playbackState else { return }
         avAdapter.pause()
-        stateLock.lock()
-        _playbackState = .paused(trackID: trackID, position: pos, duration: dur)
-        let state = _playbackState
-        stateLock.unlock()
+        let state = setState(.paused(trackID: trackID, position: pos, duration: dur))
         hapticEngine.triggerPause()
         nowPlayingManager.updatePlaybackState(isPlaying: false, position: pos)
-        liveActivityManager.updateLiveActivity(track: currentTrackCache, isPlaying: false, position: pos, duration: dur)
+        liveActivityManager.updateLiveActivity(
+            track: currentTrackCache,
+            isPlaying: false,
+            position: pos,
+            duration: dur
+        )
         eventBus.publish(.trackPaused(trackID: trackID, position: pos))
         eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
         stopPositionTimer()
     }
-    
+
     private func resumePlayback(trackID: String) async throws {
-        stateLock.lock()
         var position: TimeInterval = 0
         var duration: TimeInterval = 0
-        if case .paused(_, let pos, let dur) = _playbackState {
+        if case .paused(_, let pos, let dur) = playbackState {
             position = pos
             duration = dur
         }
-        _playbackState = .playing(trackID: trackID, position: position, duration: duration)
-        let state = _playbackState
-        stateLock.unlock()
+        try sessionManager.activate()
+        let state = setState(.playing(trackID: trackID, position: position, duration: duration))
         avAdapter.play()
         hapticEngine.triggerPlay()
         nowPlayingManager.updatePlaybackState(isPlaying: true, position: position)
-        liveActivityManager.updateLiveActivity(track: currentTrackCache, isPlaying: true, position: position, duration: duration)
+        liveActivityManager.updateLiveActivity(
+            track: currentTrackCache,
+            isPlaying: true,
+            position: position,
+            duration: duration
+        )
         eventBus.publish(.trackResumed(trackID: trackID, position: position))
         eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
         startPositionTimer()
     }
-    
-    private func startPlayback(trackID: String) async throws {
-        var track: AstryxTrack?
-        if let engine = libraryEngine {
-            track = try? await engine.fetchTrack(id: trackID)
+
+    /// Loads and starts a track. Throws `PlaybackError` instead of pretending.
+    func startPlayback(trackID: String) async throws {
+        guard let resolver = sourceResolver else {
+            let state = fail(trackID: trackID, error: PlaybackError.noPlaybackSource)
+            throw PlaybackError.failedState(state)
         }
-        let fileURL = track?.fileURL ?? URL(fileURLWithPath: "/tmp/\(trackID).mp3")
-        let duration = track?.duration ?? 180
+        guard let source = await resolver.resolvePlaybackSource(trackID: trackID) else {
+            let state = fail(trackID: trackID, error: PlaybackError.trackNotResolved(trackID: trackID))
+            throw PlaybackError.failedState(state)
+        }
+
         do {
-            try avAdapter.load(url: fileURL)
-            avAdapter.play()
+            try avAdapter.load(url: source.url)
         } catch {
-            #if DEBUG
-            debugPrint("[AstryxAudioEngine] AVFoundation load failed, using simulated playback: \(error)")
-            #endif
+            let state = fail(
+                trackID: trackID,
+                error: PlaybackError.loadFailed(trackID: trackID, reason: error.localizedDescription)
+            )
+            throw PlaybackError.failedState(state)
         }
-        currentTrackCache = track
+
+        avAdapter.play()
+        currentTrackCache = source.track
         transitionArmedTrackID = nil
-        stateLock.lock()
-        _playbackState = .playing(trackID: trackID, position: 0, duration: duration)
-        let state = _playbackState
-        stateLock.unlock()
+
+        let duration = source.track.duration > 0 ? source.track.duration : avAdapter.duration()
+        let state = setState(.playing(trackID: trackID, position: 0, duration: duration))
+
         hapticEngine.triggerPlay()
-        nowPlayingManager.updateNowPlaying(track: track, isPlaying: true, position: 0, duration: duration, artworkData: track?.artworkData)
-        if let track = track {
-            liveActivityManager.startLiveActivity(track: track, isPlaying: true, position: 0)
-        }
+        nowPlayingManager.updateNowPlaying(
+            track: source.track,
+            isPlaying: true,
+            position: 0,
+            duration: duration,
+            artworkData: source.track.artworkData
+        )
+        liveActivityManager.startLiveActivity(track: source.track, isPlaying: true, position: 0)
+
         let queueID = currentQueue.id
         eventBus.publish(.trackStarted(trackID: trackID, queueID: queueID))
         eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
-        try? await libraryEngine?.recordPlay(trackID: trackID)
+        await recordPlay(trackID: trackID)
         startPositionTimer()
-        preloadNext()
     }
-    
+
     private func togglePlayPause() async throws {
         if playbackState.isPlaying {
             try await pause()
@@ -205,339 +295,134 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
             try await play(trackID: nil)
         }
     }
-    
-    private func stop() async throws {
+
+    func stop() async throws {
         avAdapter.stop()
         transitionArmedTrackID = nil
-        stateLock.lock()
-        _playbackState = .stopped
-        let state = _playbackState
-        stateLock.unlock()
+        wasPlayingBeforeInterruption = false
+        let state = setState(.stopped)
         nowPlayingManager.clear()
         liveActivityManager.endLiveActivity()
         eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
         try? sessionManager.deactivate()
         stopPositionTimer()
     }
-    
+
     public func seek(to: TimeInterval) async throws {
         let clamped = max(0, to)
-        stateLock.lock()
-        let oldPos = _playbackState.position
-        let trackID = _playbackState.currentTrackID
-        let duration = _playbackState.duration
-        switch _playbackState {
+        let oldPos = playbackState.position
+        let trackID = playbackState.currentTrackID
+        let duration = playbackState.duration
+
+        var newState = playbackState
+        switch playbackState {
         case .playing(let id, _, let dur):
-            _playbackState = .playing(trackID: id, position: clamped, duration: dur)
+            newState = .playing(trackID: id, position: clamped, duration: dur)
         case .paused(let id, _, let dur):
-            _playbackState = .paused(trackID: id, position: clamped, duration: dur)
+            newState = .paused(trackID: id, position: clamped, duration: dur)
         default:
             break
         }
-        let state = _playbackState
-        stateLock.unlock()
+        let state = setState(newState)
         avAdapter.seek(to: clamped) { _ in }
         nowPlayingManager.updatePlaybackState(isPlaying: state.isPlaying, position: clamped)
-        liveActivityManager.updateLiveActivity(track: currentTrackCache, isPlaying: state.isPlaying, position: clamped, duration: duration)
-        if let id = trackID {
-            eventBus.publish(.trackSeeked(trackID: id, from: oldPos, to: clamped))
+        liveActivityManager.updateLiveActivity(
+            track: currentTrackCache,
+            isPlaying: state.isPlaying,
+            position: clamped,
+            duration: duration
+        )
+        if let trackID {
+            eventBus.publish(.trackSeeked(trackID: trackID, from: oldPos, to: clamped))
             eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
         }
     }
-    
+
     private func seekForward(interval: TimeInterval) async throws {
         let newPos = min(playbackState.position + interval, playbackState.duration)
         try await seek(to: newPos)
     }
-    
+
     private func seekBackward(interval: TimeInterval) async throws {
-        let newPos = max(0, playbackState.position - interval)
-        try await seek(to: newPos)
-    }
-    
-    private func next() async throws {
-        hapticEngine.trigger(.light)
-        if let nextItem = await queueController.next() {
-            try await startPlayback(trackID: nextItem.trackID)
-        } else {
-            if currentQueue.repeatMode == .all, let first = currentQueue.items.first {
-                await queueController.setCurrentIndex(0)
-                try await startPlayback(trackID: first.trackID)
-            } else {
-                try await stop()
-                eventBus.publish(.trackEnded(trackID: playbackState.currentTrackID ?? "", reason: .queueEnded))
-            }
-        }
-    }
-    
-    private func previous() async throws {
-        hapticEngine.trigger(.light)
-        if playbackState.position > 3 {
-            try await seek(to: 0)
-        } else if let prevItem = await queueController.previous() {
-            try await startPlayback(trackID: prevItem.trackID)
-        } else {
-            try await seek(to: 0)
-        }
-    }
-    
-    private func playQueue(trackIDs: [String], startIndex: Int) async throws {
-        await queueController.setQueue(trackIDs: trackIDs, startIndex: startIndex, source: .manual)
-        if startIndex < trackIDs.count {
-            try await startPlayback(trackID: trackIDs[startIndex])
-        }
+        try await seek(to: max(0, playbackState.position - interval))
     }
 
-    /// Executes a committed crossfade: advances the queue, stages the next
-    /// track on the adapter's idle deck, and swaps decks over the configured
-    /// fade. Any staging failure disarms the transition so the incoming
-    /// natural track-end drives the classic hard `next()` instead.
-    private func performCrossfade(fromTrackID: String) async {
-        guard let crossfader = avAdapter as? CrossfadeCapableAudioPlayer else {
-            transitionArmedTrackID = nil
-            return
-        }
-        guard crossfadeConfiguration.isEnabled else {
-            transitionArmedTrackID = nil
-            return
-        }
-        guard let nextItem = await queueController.next() else {
-            transitionArmedTrackID = nil
-            return
-        }
-        var track: AstryxTrack?
-        if let engine = libraryEngine {
-            track = try? await engine.fetchTrack(id: nextItem.trackID)
-        }
-        let fileURL = track?.fileURL ?? URL(fileURLWithPath: "/tmp/\(nextItem.trackID).mp3")
-        let duration = track?.duration ?? 180
-        do {
-            try crossfader.prepareNext(url: fileURL)
-        } catch {
-            transitionArmedTrackID = nil
-            return
-        }
-        crossfader.activatePreparedNext(fadeDuration: crossfadeConfiguration.duration, curve: crossfadeConfiguration.curve)
-        currentTrackCache = track
-        stateLock.lock()
-        _playbackState = .playing(trackID: nextItem.trackID, position: 0, duration: duration)
-        let state = _playbackState
-        stateLock.unlock()
-        hapticEngine.trigger(.selection)
-        nowPlayingManager.updateNowPlaying(track: track, isPlaying: true, position: 0, duration: duration, artworkData: track?.artworkData)
-        liveActivityManager.updateLiveActivity(track: track, isPlaying: true, position: 0, duration: duration)
-        let queueID = currentQueue.id
-        eventBus.publish(.trackEnded(trackID: fromTrackID, reason: .natural))
-        eventBus.publish(.trackStarted(trackID: nextItem.trackID, queueID: queueID))
-        eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
-        try? await libraryEngine?.recordPlay(trackID: nextItem.trackID)
-        preloadNext()
-    }
-    
     public func setVolume(_ volume: Float) async throws {
         avAdapter.setVolume(volume)
     }
-    
+
     public func currentTrack() async -> AstryxTrack? {
         if let cached = currentTrackCache, cached.id == playbackState.currentTrackID {
             return cached
         }
-        guard let trackID = playbackState.currentTrackID else { return nil }
-        let track = try? await libraryEngine?.fetchTrack(id: trackID)
+        let trackID = playbackState.currentTrackID
+        let track: AstryxTrack?
+        if let resolver = sourceResolver, let trackID {
+            track = await resolver.resolvePlaybackSource(trackID: trackID)?.track
+        } else if let libraryEngine, let trackID {
+            track = try? await libraryEngine.fetchTrack(id: trackID)
+        } else {
+            track = nil
+        }
         currentTrackCache = track
         return track
     }
-    
-    private func preloadNext() {
-        #if DEBUG
-        if let next = currentQueue.nextItem {
-            debugPrint("[AstryxAudioEngine] Preloading next: \(next.trackID)")
-        }
-        #endif
-    }
-    
-    private func startPositionTimer() {
-        stopPositionTimer()
-        positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            let currentTime = self.avAdapter.currentTime()
-            let isAdapterPlaying = self.avAdapter.isPlaying()
-            let position: TimeInterval
-            if currentTime > 0 && isAdapterPlaying {
-                position = currentTime
-            } else {
-                position = self.playbackState.position + 0.5
-            }
-            // Read the queue before taking stateLock: the controller has its
-            // own lock, and holding stateLock across it would create a lock-
-            // ordering inversion the rest of the engine never takes.
-            let queueForTransitionCheck = self.currentQueue
-            self.stateLock.lock()
-            var newState: AstryxPlaybackState?
-            var shouldPublish = false
-            switch self._playbackState {
-            case .playing(let id, _, let dur):
-                if self.transitionArmedTrackID != id,
-                   self.crossfadeConfiguration.isEnabled,
-                   self.avAdapter is CrossfadeCapableAudioPlayer {
-                    let decision = self.transitionController.evaluate(
-                        position: position,
-                        duration: dur,
-                        configuration: self.crossfadeConfiguration,
-                        queue: queueForTransitionCheck
-                    )
-                    if decision.shouldCrossfade {
-                        self.transitionArmedTrackID = id
-                        self.stateLock.unlock()
-                        Task { await self.performCrossfade(fromTrackID: id) }
-                        return
-                    }
-                }
-                if position >= dur && dur > 0 {
-                    self.stateLock.unlock()
-                    Task { try? await self.next() }
-                    return
-                }
-                self._playbackState = .playing(trackID: id, position: position, duration: dur)
-                newState = self._playbackState
-                shouldPublish = true
-            default:
-                break
-            }
-            self.stateLock.unlock()
-            if shouldPublish, let state = newState {
-                self.eventBus.publish(.playbackStateChanged(state: self.snapshot(from: state)))
-                if Int(position) % 1 == 0 {
-                    self.nowPlayingManager.updatePlaybackState(isPlaying: state.isPlaying, position: position)
-                    self.liveActivityManager.updateLiveActivity(track: self.currentTrackCache, isPlaying: state.isPlaying, position: position, duration: state.duration)
-                }
-            }
-        }
-    }
-    
-    private func stopPositionTimer() {
-        positionTimer?.invalidate()
-        positionTimer = nil
-    }
-    
+
+    // MARK: - Setup
+
     private func observeEvents() {
-        let sub1 = eventBus.subscribe(to: QeloryxEvent.queueChanged(queueID: "", version: 0).name) { [weak self] _ in
-            self?.onQueueChanged()
+        let queueName = QeloryxEvent.queueChanged(queueID: "", version: 0).name
+        let sub1 = eventBus.subscribe(to: queueName) { [weak self] _ in
+            self?.preloadNext()
         }
         subscriptionStore.store(sub1)
-        let sub2 = eventBus.subscribe(to: QeloryxEvent.audioSessionInterrupted(reason: "").name) { [weak self] event in
-            Task { await self?.handleInterruption(event: event) }
+
+        let interruptionName = QeloryxEvent.audioSessionInterrupted(interruption: .began).name
+        let sub2 = eventBus.subscribe(to: interruptionName) { [weak self] event in
+            guard case .audioSessionInterrupted(let interruption) = event else { return }
+            self?.handleInterruption(interruption)
         }
         subscriptionStore.store(sub2)
     }
-    
-    private func onQueueChanged() { preloadNext() }
-    
-    private func handleInterruption(event: QeloryxEvent) async {
-        if case .audioSessionInterrupted(let reason) = event {
-            if reason == "began" {
-                try? await pause()
-            } else if reason.contains("shouldResume_true") {
-                try? await play(trackID: nil)
+
+    private func handleInterruption(_ interruption: AudioSessionInterruption) {
+        switch interruption {
+        case .began:
+            wasPlayingBeforeInterruption = playbackState.isPlaying
+            Task { [weak self] in
+                try? await self?.pause()
+            }
+        case .ended(let shouldResume):
+            let shouldRestart = shouldResume && wasPlayingBeforeInterruption
+            wasPlayingBeforeInterruption = false
+            guard shouldRestart else { return }
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.play(trackID: nil)
+                } catch {
+                    self.publishError(error, context: "resume-after-interruption")
+                }
+            }
+        case .oldDeviceUnavailable:
+            // Headphones were unplugged: pause instead of blasting the speaker.
+            wasPlayingBeforeInterruption = false
+            Task { [weak self] in
+                try? await self?.pause()
             }
         }
     }
-    
+
+    private func preloadNext() {
+        guard let next = queueController.previewNext() else { return }
+        #if DEBUG
+        debugPrint("[AstryxAudioEngine] Preload candidate: \(next.trackID)")
+        #endif
+    }
+
     private func setupNowPlayingHandler() {
-        let handler = RemoteCommandHandler(engine: self)
-        nowPlayingManager.configure(handler: handler)
-    }
-    
-    private func snapshot(from state: AstryxPlaybackState) -> PlaybackStateSnapshot {
-        switch state {
-        case .idle, .stopped, .failed:
-            return PlaybackStateSnapshot(trackID: nil, isPlaying: false, position: 0, duration: 0, queueVersion: currentQueue.version, shuffleEnabled: currentQueue.shuffleEnabled, repeatMode: mapRepeatMode(currentQueue.repeatMode))
-        case .loading(let id):
-            return PlaybackStateSnapshot(trackID: id, isPlaying: false, position: 0, duration: 0, queueVersion: currentQueue.version, shuffleEnabled: currentQueue.shuffleEnabled, repeatMode: mapRepeatMode(currentQueue.repeatMode))
-        case .playing(let id, let pos, let dur):
-            return PlaybackStateSnapshot(trackID: id, isPlaying: true, position: pos, duration: dur, queueVersion: currentQueue.version, shuffleEnabled: currentQueue.shuffleEnabled, repeatMode: mapRepeatMode(currentQueue.repeatMode))
-        case .paused(let id, let pos, let dur):
-            return PlaybackStateSnapshot(trackID: id, isPlaying: false, position: pos, duration: dur, queueVersion: currentQueue.version, shuffleEnabled: currentQueue.shuffleEnabled, repeatMode: mapRepeatMode(currentQueue.repeatMode))
-        }
-    }
-    
-    private func mapRepeatMode(_ mode: AstryxRepeatMode) -> RepeatModeSnapshot {
-        switch mode {
-        case .off: return .off
-        case .all: return .all
-        case .one: return .one
-        }
+        nowPlayingManager.configure(handler: RemoteCommandHandler(engine: self))
     }
 }
-
-extension AstryxAudioEngine: AVFoundationAdapterDelegate {
-    public func adapterDidFinishPlaying() {
-        Task { try? await next() }
-    }
-    public func adapterDidFail(error: Error) {
-        stateLock.lock()
-        let trackID = _playbackState.currentTrackID
-        _playbackState = .failed(trackID: trackID, error: error.localizedDescription)
-        let state = _playbackState
-        stateLock.unlock()
-        eventBus.publish(.playbackStateChanged(state: snapshot(from: state)))
-        eventBus.publish(.trackEnded(trackID: trackID ?? "", reason: .error))
-    }
-    public func adapterTimeDidUpdate(time: TimeInterval) {}
-    public func adapterDidChangeStatus(isReady: Bool) {}
-}
-
-#if canImport(MediaPlayer) && canImport(UIKit)
-import MediaPlayer
-
-private final class RemoteCommandHandler: NowPlayingCommandHandler {
-    weak var engine: AstryxAudioEngine?
-    init(engine: AstryxAudioEngine) { self.engine = engine }
-    func handlePlay() -> MPRemoteCommandHandlerStatus {
-        Task { try? await engine?.handle(command: .play()) }
-        return .success
-    }
-    func handlePause() -> MPRemoteCommandHandlerStatus {
-        Task { try? await engine?.handle(command: .pause) }
-        return .success
-    }
-    func handleNext() -> MPRemoteCommandHandlerStatus {
-        Task { try? await engine?.handle(command: .next) }
-        return .success
-    }
-    func handlePrevious() -> MPRemoteCommandHandlerStatus {
-        Task { try? await engine?.handle(command: .previous) }
-        return .success
-    }
-    func handleSeek(to time: TimeInterval) -> MPRemoteCommandHandlerStatus {
-        if time == -1 {
-            Task { try? await engine?.handle(command: .seekForward()) }
-        } else if time == -2 {
-            Task { try? await engine?.handle(command: .seekBackward()) }
-        } else {
-            Task { try? await engine?.handle(command: .seek(to: time)) }
-        }
-        return .success
-    }
-    func handleTogglePlayPause() -> MPRemoteCommandHandlerStatus {
-        Task { try? await engine?.handle(command: .togglePlayPause) }
-        return .success
-    }
-}
-
-#else
-
-private final class RemoteCommandHandler: NowPlayingCommandHandler {
-    weak var engine: AstryxAudioEngine?
-    init(engine: AstryxAudioEngine) { self.engine = engine }
-    func handlePlay() -> Int { 0 }
-    func handlePause() -> Int { 0 }
-    func handleNext() -> Int { 0 }
-    func handlePrevious() -> Int { 0 }
-    func handleSeek(to time: TimeInterval) -> Int { 0 }
-    func handleTogglePlayPause() -> Int { 0 }
-}
-
-#endif
 
 public typealias AstryxPlaybackCoordinator = AstryxAudioEngine

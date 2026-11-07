@@ -94,6 +94,29 @@ public final class AstryxMetadataExtractor: @unchecked Sendable {
             artworkData: artworkData
         )
     }
+
+    /// Common tags only cover a handful of fields. Formats such as FLAC carry
+    /// Vorbis comments that surface through `availableMetadataFormats`, so the
+    /// extractor also folds those in (see `extractFormatMetadata`).
+    func extractFormatMetadata(from asset: AVURLAsset) async -> RawMetadata {
+        var metadata = RawMetadata()
+        for format in asset.availableMetadataFormats {
+            guard let items = try? await asset.loadMetadata(for: format) else { continue }
+            for item in items {
+                guard let key = item.identifier?.rawValue.lowercased() else { continue }
+                let stringValue = try? await item.load(.stringValue)
+                if key.contains("discnumber") || key.contains("disc"), metadata.discNumber == nil {
+                    if let raw = stringValue, let value = Int(raw.components(separatedBy: "/").first ?? "") {
+                        metadata.discNumber = value
+                    }
+                }
+                if key.contains("lyrics") || key.contains("unsyncedlyrics"), metadata.lyrics == nil {
+                    metadata.lyrics = stringValue
+                }
+            }
+        }
+        return metadata
+    }
     
     public func extractArtwork(from url: URL) async throws -> Data? {
         let metadata = try await extractMetadata(from: url)

@@ -35,9 +35,9 @@ public struct IndexingResult: Sendable, Equatable {
 public final class AstryxLibraryIndexer: LibraryIndexerProtocol {
     
     private let eventBus: any EventBusProtocol
-    private let metadataNormalizer: MetadataNormalizerProtocol
+    private let metadataNormalizer: any MetadataNormalizerProtocol
     
-    public init(eventBus: any EventBusProtocol = AstryxEventBus.shared, metadataNormalizer: MetadataNormalizerProtocol = AstryxMetadataNormalizer()) {
+    public init(eventBus: any EventBusProtocol = AstryxEventBus.shared, metadataNormalizer: any MetadataNormalizerProtocol = AstryxMetadataNormalizer()) {
         self.eventBus = eventBus
         self.metadataNormalizer = metadataNormalizer
     }

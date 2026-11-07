@@ -3,19 +3,30 @@
 
 import Foundation
 
+/// One entry in the play queue.
+///
+/// There is deliberately **no** `isCurrent` flag: it was set once when the
+/// queue was built and never updated afterwards, so after the first track change
+/// it pointed at the wrong item while looking authoritative. The single source
+/// of truth for the current entry is `AstryxQueue.currentIndex`
+/// (`AstryxQueue.currentItem` derives from it).
 public struct AstryxQueueItem: Identifiable, Sendable, Equatable, Hashable {
     public let id: String
     public let trackID: String
     public var order: Int
-    public var isCurrent: Bool
     public var addedAt: Date
     public var source: QueueSource
-    
-    public init(id: String = UUID().uuidString, trackID: String, order: Int, isCurrent: Bool = false, addedAt: Date = Date(), source: QueueSource = .manual) {
+
+    public init(
+        id: String = UUID().uuidString,
+        trackID: String,
+        order: Int,
+        addedAt: Date = Date(),
+        source: QueueSource = .manual
+    ) {
         self.id = id
         self.trackID = trackID
         self.order = order
-        self.isCurrent = isCurrent
         self.addedAt = addedAt
         self.source = source
     }
@@ -42,7 +53,15 @@ public struct AstryxQueue: Sendable, Equatable {
     public var repeatMode: AstryxRepeatMode
     public var originalOrder: [AstryxQueueItem]? // For shuffle off restore
     
-    public init(id: String = UUID().uuidString, items: [AstryxQueueItem] = [], currentIndex: Int? = nil, version: Int = 0, shuffleEnabled: Bool = false, repeatMode: AstryxRepeatMode = .off, originalOrder: [AstryxQueueItem]? = nil) {
+    public init(
+        id: String = UUID().uuidString,
+        items: [AstryxQueueItem] = [],
+        currentIndex: Int? = nil,
+        version: Int = 0,
+        shuffleEnabled: Bool = false,
+        repeatMode: AstryxRepeatMode = .off,
+        originalOrder: [AstryxQueueItem]? = nil
+    ) {
         self.id = id
         self.items = items
         self.currentIndex = currentIndex

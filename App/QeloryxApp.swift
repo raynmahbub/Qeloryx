@@ -1,124 +1,102 @@
 // QELORYX — App
 // QeloryxApp.swift
-// QEL-051 Polish — Production composition root with all engines, performance monitoring, launch optimization
+//
+// The app entry point now owns nothing but lifecycle. Every engine, adapter and
+// store is built once by `AppDependencies.live()` and injected downward, so:
+//   • the library is backed by the persistent SwiftData store (BUG-01)
+//   • one DSP instance serves both the engine and the Audio Lab (BUG-07)
+//   • the crossfade setting reaches the dual-deck adapter (BUG-06)
+//   • the queue and position are persisted and restored paused
+//
+// The previous version built ~15 concrete objects inline, kept them as `let`
+// properties and still left views default-constructing their own engines.
 
 import SwiftUI
 
 @main
 struct QeloryxApp: App {
-    
-    private let eventBus: any EventBusProtocol = AstryxEventBus.shared
-    private let capabilityRegistry = AstryxCapabilityRegistry.shared
-    private let providerRegistry = AstryxProviderRegistry.shared
-    private let performanceMonitor = AstryxPerformanceMonitor.shared
-    private let launchOptimizer = AstryxLaunchOptimizer.shared
-    
-    private let libraryEngine: any LibraryEngineProtocol
-    private let audioEngine: any AstryxAudioEngineProtocol
-    private let searchEngine: any SearchEngineProtocol
-    private let downloadEngine: any DownloadEngineProtocol
-    private let queueController: any QueueControllerProtocol
-    private let tasteEngine: any TasteDNAEngineProtocol
-    private let recommendationProvider: any RecommendationProviderProtocol
-    private let lyricsEngine: any LyricsEngineProtocol
-    private let dspEngine: any DSPEngineProtocol
-    private let avAdapter: any AudioPlayerAdapterProtocol
-    private let sessionManager: any AudioSessionManagerProtocol
-    private let nowPlayingManager: any NowPlayingManagerProtocol
-    private let liveActivityManager: any LiveActivityManagerProtocol
-    private let hapticEngine: any HapticEngineProtocol
-    private let downloadSessionManager: any DownloadSessionProtocol
-    
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    private let dependencies: AppDependencies
     @StateObject private var playerViewModel: AstryxPlayerViewModel
-    
+
     init() {
-        // Performance: start launch tracking immediately — cold launch <1.5s budget
         AstryxLaunchOptimizer.shared.optimizeColdLaunch()
-        
-        let eventBus = AstryxEventBus.shared
-        // Dual-deck gapless adapter: identical to the classic adapter for
-        // hard transitions, and honors `.setCrossfade` by pre-staging the
-        // next track on the standby deck for seamless fades.
-        let avAdapter: any AudioPlayerAdapterProtocol = GaplessAudioPlayerAdapter()
-        let sessionManager: any AudioSessionManagerProtocol = AstryxAudioSessionManager(eventBus: eventBus)
-        let nowPlaying: any NowPlayingManagerProtocol = AstryxNowPlayingManager.shared
-        let liveActivity: any LiveActivityManagerProtocol = AstryxLiveActivityManager.shared
-        let haptics: any HapticEngineProtocol = AstryxHapticEngine.shared
-        
-        // Core engines — lazy initialization for cold launch optimization
-        let library = AstryxLibraryEngine(eventBus: eventBus)
-        let queueController = AstryxQueueController(eventBus: eventBus)
-        let tasteEngine = AstryxTasteDNAEngine(eventBus: eventBus)
-        let dspEngine = AstryxDSPEngine()
-        let lyricsEngine = AstryxLyricsEngine(eventBus: eventBus)
-        
-        // Download engine with platform session injection (layer isolation)
-        let downloadSessionManager: any DownloadSessionProtocol = AstryxDownloadSessionManager()
-        let downloadEngine = AstryxDownloadEngine(eventBus: eventBus, downloadSession: downloadSessionManager)
-        
-        let audio = AstryxAudioEngine(
-            queueController: queueController,
-            sessionManager: sessionManager,
-            eventBus: eventBus,
-            libraryEngine: library,
-            nowPlayingManager: nowPlaying,
-            liveActivityManager: liveActivity,
-            hapticEngine: haptics,
-            avAdapter: avAdapter
+
+        let dependencies = AppDependencies.live()
+        self.dependencies = dependencies
+
+        // The player view model receives the composition root's engines. It no
+        // longer default-constructs an audio engine or a library (BUG-19).
+        let viewModel = AstryxPlayerViewModel(
+            audioEngine: dependencies.audioEngine,
+            libraryEngine: dependencies.libraryEngine,
+            eventBus: dependencies.eventBus,
+            dspEngine: dependencies.dspEngine,
+            settings: dependencies.settingsRepository,
+            playbackRestorer: dependencies.playbackRestorer
         )
-        let search = AstryxSearchEngine(libraryEngine: library, eventBus: eventBus)
-        let recommendationProvider = AstryxRecommendationProvider(tasteEngine: tasteEngine)
-        
-        self.libraryEngine = library
-        self.audioEngine = audio
-        self.searchEngine = search
-        self.downloadEngine = downloadEngine
-        self.queueController = queueController
-        self.tasteEngine = tasteEngine
-        self.recommendationProvider = recommendationProvider
-        self.lyricsEngine = lyricsEngine
-        self.dspEngine = dspEngine
-        self.avAdapter = avAdapter
-        self.sessionManager = sessionManager
-        self.nowPlayingManager = nowPlaying
-        self.liveActivityManager = liveActivity
-        self.hapticEngine = haptics
-        self.downloadSessionManager = downloadSessionManager
-        
-        let vm = AstryxPlayerViewModel(audioEngine: audio, libraryEngine: library, eventBus: eventBus)
-        _playerViewModel = StateObject(wrappedValue: vm)
-        
-        // Background tasks
+        _playerViewModel = StateObject(wrappedValue: viewModel)
+
         AstryxBackgroundTaskManager.shared.registerBackgroundTasks()
-        
-        // Providers
-        providerRegistry.register(AstryxLyricsProvider() as any Provider)
-        providerRegistry.register(AstryxArtworkProvider() as any Provider)
-        providerRegistry.register(recommendationProvider as any Provider)
-        
+
+        // Apply persisted audio preferences before any playback can start.
+        let settings = dependencies.settingsRepository
+        Task { [audioEngine = dependencies.audioEngine] in
+            await settings.applyAudioSettings(to: audioEngine)
+            if let downloadSession = dependencies.downloadSession as? AstryxDownloadSessionManager {
+                downloadSession.setAllowsCellularAccess(settings.downloads.allowsCellular)
+            }
+        }
+
         #if DEBUG
-        debugPrint("[QELORYX] App initialized — \(AppConfiguration.current.version) — Midnight Aurora — QEL-051 Polish — Performance monitoring active")
+        debugPrint("[QELORYX] \(dependencies.configuration.version) — composition root ready")
         #endif
-        
-        // End launch tracking — should be <1.5s cold
-        AstryxLaunchOptimizer.shared.endLaunchTracking()
+        // Launch tracking is ended in `restorePlaybackIfNeeded`, after the first
+        // frame is on screen — not here, where nothing has been rendered yet.
     }
-    
+
     var body: some Scene {
         WindowGroup {
             RootView(viewModel: playerViewModel)
-                .environment(\.audioEngine, audioEngine)
-                .environment(\.libraryEngine, libraryEngine)
-                .environment(\.searchEngine, searchEngine)
-                .environment(\.eventBus, eventBus)
-                .astrixTheme() // Midnight Aurora theme — dark-first, auroraBlue tint
-                .onAppear {
-                    // Warm launch tracking for subsequent launches
-                    AstryxLaunchOptimizer.shared.optimizeWarmLaunch()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        AstryxLaunchOptimizer.shared.endLaunchTracking()
-                    }
+                .environment(\.audioEngine, dependencies.audioEngine)
+                .environment(\.libraryEngine, dependencies.libraryEngine)
+                .environment(\.searchEngine, dependencies.searchEngine)
+                .environment(\.eventBus, dependencies.eventBus)
+                .environment(\.downloadEngine, dependencies.downloadEngine)
+                .environment(\.dspEngine, dependencies.dspEngine)
+                .environment(\.settings, dependencies.settingsRepository)
+                .environment(\.lyricsEngine, dependencies.lyricsEngine)
+                .environment(\.tasteEngine, dependencies.tasteEngine)
+                .astrixTheme()
+                .task {
+                    await restorePlaybackIfNeeded()
                 }
         }
+        .onChange(of: scenePhase) { phase in
+            switch phase {
+            case .background, .inactive:
+                // Persist the resume point whenever we leave the foreground.
+                dependencies.playbackRestorer.capture(from: dependencies.audioEngine)
+            default:
+                break
+            }
+        }
+    }
+
+    /// Restores the last queue **paused**. Never auto-plays: an app that starts
+    /// making noise on launch is worse than one that forgot where it was.
+    private func restorePlaybackIfNeeded() async {
+        defer {
+            // Always close the launch measurement, even on the early-exit paths.
+            AstryxLaunchOptimizer.shared.optimizeWarmLaunch()
+            AstryxLaunchOptimizer.shared.endLaunchTracking()
+        }
+
+        guard dependencies.settingsRepository.playback.restoreQueueOnLaunch else { return }
+        // No `as?` cast: restoration is part of `AstryxAudioEngineProtocol`, so
+        // substituting the engine implementation cannot silently disable it.
+        await dependencies.playbackRestorer.restore(into: dependencies.audioEngine, paused: true)
     }
 }

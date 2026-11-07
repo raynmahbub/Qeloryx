@@ -5,19 +5,15 @@
 import SwiftUI
 
 public struct RootView: View {
-    
+
     @StateObject private var coordinator = AppCoordinator()
     @StateObject private var playerViewModel: AstryxPlayerViewModel
-    @Environment(\.audioEngine) private var audioEngine
-    @Environment(\.eventBus) private var eventBus
-    @Environment(\.libraryEngine) private var libraryEngine
-    
-    public init(viewModel: AstryxPlayerViewModel? = nil) {
-        if let vm = viewModel {
-            _playerViewModel = StateObject(wrappedValue: vm)
-        } else {
-            _playerViewModel = StateObject(wrappedValue: AstryxPlayerViewModel())
-        }
+
+    /// The player view model is mandatory: it carries the app's real engines.
+    /// The previous optional/`AstryxPlayerViewModel()` fallback built a second
+    /// engine graph whenever the caller omitted it (BUG-19).
+    public init(viewModel: AstryxPlayerViewModel) {
+        _playerViewModel = StateObject(wrappedValue: viewModel)
     }
     
     public var body: some View {
@@ -55,21 +51,109 @@ public struct RootView: View {
                 .animation(AstryxAnimations.cardAppear, value: playerViewModel.playbackState.currentTrackID)
             }
         }
+        // `.astrixTheme()` is applied once, by `QeloryxApp`, around this view.
         .background(AstryxColors.Semantic.background.ignoresSafeArea())
-        .astrixTheme()
         .sheet(isPresented: $coordinator.isPlayerPresented) {
             AstryxPlayerView(viewModel: playerViewModel)
         }
+        // Non-tab destinations (settings, album, artist, audio lab, lyrics…).
+        // The coordinator used to append these to a `NavigationPath` that no
+        // view rendered, so navigating did nothing (BUG-18).
+        .sheet(item: $coordinator.presentedRoute) { route in
+            RouteDestinationView(route: route, coordinator: coordinator, playerViewModel: playerViewModel)
+        }
+        // The coordinator already observes `trackStarted` on its own event-bus
+        // subscription, so a second subscription here was redundant (and the
+        // `Task.sleep(nanoseconds: .max)` used to keep it alive can trap on
+        // deadline overflow). Nothing to do in `.task` now.
         .task {
-            let subscription = eventBus.subscribe { event in
-                if case .trackStarted(let trackID, _) = event {
-                    Task { @MainActor in coordinator.currentTrackID = trackID }
+            await coordinator.refreshFromEngine()
+        }
+    }
+}
+
+// MARK: - Route destination
+
+/// Maps a non-tab `AppRoute` to a screen.
+///
+/// Only the routes with a real screen are handled; the rest render an explicit
+/// "not available" placeholder rather than a blank sheet pretending to work.
+private struct RouteDestinationView: View {
+    let route: AppRoute
+    /// `@ObservedObject` (not a plain `let`): the sheet's Done button mutates
+    /// the coordinator, and a non-observed reference would not refresh.
+    @ObservedObject var coordinator: AppCoordinator
+    @ObservedObject var playerViewModel: AstryxPlayerViewModel
+
+    @Environment(\.dspEngine) private var dspEngine
+    @Environment(\.lyricsEngine) private var lyricsEngine
+    @Environment(\.libraryEngine) private var libraryEngine
+    @Environment(\.audioEngine) private var audioEngine
+    @Environment(\.tasteEngine) private var tasteEngine
+
+    var body: some View {
+        NavigationStack {
+            content
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { coordinator.dismissRoute() }
+                    }
                 }
-            }
-            defer { subscription.cancel() }
-            // EventSubscription cancels on deinit, so keep it alive until
-            // SwiftUI cancels this task when the view disappears.
-            try? await Task.sleep(nanoseconds: .max)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch route {
+        case .audioLab:
+            AudioLabView(dspEngine: dspEngine)
+        case .lyrics(let trackID):
+            // The track is looked up by the player view model; the sheet only
+            // needs the engine pair plus a stable identity.
+            LyricsView(
+                track: playerViewModel.currentTrack?.id == trackID ? playerViewModel.currentTrack : nil,
+                lyricsEngine: lyricsEngine,
+                playerEngine: audioEngine
+            )
+            .id(trackID)
+        case .tasteDNA:
+            TasteDNAView(tasteEngine: tasteEngine, libraryEngine: libraryEngine)
+        case .timeCapsule:
+            TimeCapsuleView(libraryEngine: libraryEngine)
+        case .album(_), .artist(_), .settings, .spaces, .player(_), .library, .search,
+             .discovery, .dashboard, .downloads:
+            NotAvailableView(route: route)
+        }
+    }
+}
+
+/// Honest placeholder for destinations that do not exist yet.
+private struct NotAvailableView: View {
+    let route: AppRoute
+
+    var body: some View {
+        VStack(spacing: AstryxSpacing.md) {
+            Image(systemName: "hammer")
+                .font(.system(size: 40))
+                .foregroundColor(AstryxColors.Semantic.foregroundTertiary)
+            Text(routeTitle)
+                .font(AstryxTypography.Heading.h4)
+                .foregroundColor(AstryxColors.Semantic.foreground)
+            Text("This screen isn't built yet.")
+                .font(AstryxTypography.Body.small)
+                .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AstryxColors.Semantic.background.ignoresSafeArea())
+    }
+
+    private var routeTitle: String {
+        switch route {
+        case .album(_): return "Album"
+        case .artist(_): return "Artist"
+        case .settings: return "Settings"
+        case .spaces: return "Spaces"
+        default: return "Coming soon"
         }
     }
 }
@@ -163,44 +247,74 @@ private struct EnhancedMiniPlayer: View {
     }
 }
 
-// MARK: - Tabs — Production with real views
+// MARK: - Tabs
+//
+// Each tab reads its engines from the environment injected by
+// `QeloryxApp` (the composition root) and hands them to the view. No tab
+// constructs its own engine, so all five tabs share one library, one audio
+// engine and one download engine.
 
 private struct LibraryRootTab: View {
+    @Environment(\.libraryEngine) private var libraryEngine
+    @Environment(\.audioEngine) private var audioEngine
+
     var body: some View {
         NavigationStack {
-            LibraryView()
+            LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine)
         }
     }
 }
 
 private struct SearchTab: View {
+    @Environment(\.searchEngine) private var searchEngine
+
     var body: some View {
         NavigationStack {
-            SearchView()
+            SearchView(searchEngine: searchEngine)
         }
     }
 }
 
 private struct DiscoveryTab: View {
+    @Environment(\.tasteEngine) private var tasteEngine
+    @Environment(\.libraryEngine) private var libraryEngine
+    @Environment(\.dspEngine) private var dspEngine
+
     var body: some View {
         NavigationStack {
-            DiscoveryView()
+            DiscoveryView(
+                tasteEngine: tasteEngine,
+                libraryEngine: libraryEngine,
+                dspEngine: dspEngine
+            )
         }
     }
 }
 
 private struct DashboardTab: View {
+    @Environment(\.libraryEngine) private var libraryEngine
+    @Environment(\.downloadEngine) private var downloadEngine
+    @Environment(\.tasteEngine) private var tasteEngine
+    @Environment(\.audioEngine) private var audioEngine
+
     var body: some View {
         NavigationStack {
-            DashboardView()
+            DashboardView(
+                libraryEngine: libraryEngine,
+                downloadEngine: downloadEngine,
+                tasteEngine: tasteEngine,
+                audioEngine: audioEngine
+            )
         }
     }
 }
 
 private struct DownloadsTab: View {
+    @Environment(\.downloadEngine) private var downloadEngine
+
     var body: some View {
         NavigationStack {
-            DownloadsView()
+            DownloadsView(downloadEngine: downloadEngine)
         }
     }
 }
