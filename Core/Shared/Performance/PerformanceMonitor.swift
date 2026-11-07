@@ -191,7 +191,26 @@ public final class AstryxPerformanceMonitor: @unchecked Sendable {
     
     // MARK: - Budget Check
     
-    public func checkBudgets() -> [(name: String, passed: Bool, avgDuration: TimeInterval, target: TimeInterval)] {
+    /// One budget evaluated against the recorded metrics.
+    ///
+    /// A named struct rather than a four-element tuple: the tuple tripped
+    /// SwiftLint's `large_tuple` rule at error severity, and named fields read
+    /// the same at the call site.
+    public struct BudgetResult: Sendable, Equatable {
+        public let name: String
+        public let passed: Bool
+        public let avgDuration: TimeInterval
+        public let target: TimeInterval
+
+        public init(name: String, passed: Bool, avgDuration: TimeInterval, target: TimeInterval) {
+            self.name = name
+            self.passed = passed
+            self.avgDuration = avgDuration
+            self.target = target
+        }
+    }
+
+    public func checkBudgets() -> [BudgetResult] {
         let budgets: [(String, TimeInterval)] = [
             ("Cold Launch", PerformanceBudget.coldLaunch),
             ("Warm Launch", PerformanceBudget.warmLaunch),
@@ -210,7 +229,7 @@ public final class AstryxPerformanceMonitor: @unchecked Sendable {
         return budgets.map { (name, target) in
             let avg = averageDuration(for: name) ?? 0
             let passed = avg <= target || avg == 0 // 0 means no data yet, considered passing
-            return (name, passed, avg, target)
+            return BudgetResult(name: name, passed: passed, avgDuration: avg, target: target)
         }
     }
 }
