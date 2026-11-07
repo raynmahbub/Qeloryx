@@ -9,11 +9,6 @@ public enum AudioSessionCategory: String, Sendable {
     case ambient
 }
 
-public enum AudioSessionInterruption: Sendable {
-    case began
-    case ended(shouldResume: Bool)
-}
-
 public protocol AudioSessionManagerProtocol: Sendable {
     func configure(category: AudioSessionCategory) throws
     func activate() throws
@@ -25,20 +20,15 @@ public protocol AudioSessionManagerProtocol: Sendable {
 
 public final class FallbackAudioSessionManager: AudioSessionManagerProtocol, @unchecked Sendable {
     private let eventBus: any EventBusProtocol
-    
+
     public init(eventBus: any EventBusProtocol = AstryxEventBus.shared) {
         self.eventBus = eventBus
     }
-    
+
     public func configure(category: AudioSessionCategory) throws {}
     public func activate() throws {}
     public func deactivate() throws {}
     public func handleInterruption(_ interruption: AudioSessionInterruption) {
-        switch interruption {
-        case .began:
-            eventBus.publish(.audioSessionInterrupted(reason: "began"))
-        case .ended(let shouldResume):
-            eventBus.publish(.audioSessionInterrupted(reason: "ended_shouldResume_\(shouldResume)"))
-        }
+        eventBus.publish(.audioSessionInterrupted(interruption: interruption))
     }
 }

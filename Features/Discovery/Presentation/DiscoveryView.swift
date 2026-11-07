@@ -8,8 +8,18 @@ public struct DiscoveryView: View {
     
     @StateObject private var viewModel: DiscoveryViewModel
     
-    public init(viewModel: DiscoveryViewModel = DiscoveryViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+    public init(
+        tasteEngine: any TasteDNAEngineProtocol,
+        libraryEngine: any LibraryEngineProtocol,
+        dspEngine: any DSPEngineProtocol
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: DiscoveryViewModel(
+                tasteEngine: tasteEngine,
+                libraryEngine: libraryEngine,
+                dspEngine: dspEngine
+            )
+        )
     }
     
     public var body: some View {
@@ -57,7 +67,7 @@ public struct DiscoveryView: View {
             HStack {
                 SectionHeader(title: "Your Taste DNA", icon: "waveform.path.ecg")
                 Spacer()
-                NavigationLink(destination: TasteDNAView()) {
+                NavigationLink(destination: TasteDNAView(tasteEngine: tasteEngine, libraryEngine: libraryEngine)) {
                     Text("View All")
                         .font(AstryxTypography.Body.small)
                         .foregroundColor(AstryxColors.auroraBlue)
@@ -161,7 +171,7 @@ public struct DiscoveryView: View {
     }
     
     private var audioLabEntry: some View {
-        NavigationLink(destination: AudioLabView()) {
+        NavigationLink(destination: AudioLabView(dspEngine: dspEngine)) {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
@@ -225,7 +235,7 @@ public struct DiscoveryView: View {
     }
     
     private var timeCapsuleEntry: some View {
-        NavigationLink(destination: TimeCapsuleView()) {
+        NavigationLink(destination: TimeCapsuleView(libraryEngine: libraryEngine)) {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
@@ -268,11 +278,14 @@ public final class DiscoveryViewModel: ObservableObject {
     
     private let tasteEngine: any TasteDNAEngineProtocol
     private let libraryEngine: any LibraryEngineProtocol
+    private let dspEngine: any DSPEngineProtocol
     
     public init(
-        tasteEngine: any TasteDNAEngineProtocol = AstryxTasteDNAEngine(),
-        libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine()
+        tasteEngine: any TasteDNAEngineProtocol,
+        libraryEngine: any LibraryEngineProtocol,
+        dspEngine: any DSPEngineProtocol
     ) {
+        self.dspEngine = dspEngine
         self.tasteEngine = tasteEngine
         self.libraryEngine = libraryEngine
     }
@@ -283,8 +296,10 @@ public final class DiscoveryViewModel: ObservableObject {
         let tracks = (try? await libraryEngine.fetchAllTracks()) ?? []
         
         if tracks.isEmpty {
-            // Mock for preview
-            profile = mockProfile
+            // No tracks ⇒ no profile. The previous code substituted a
+            // fabricated "Indie / Rock / Lo-Fi" profile with invented play
+            // counts, so an empty library looked like a rich one (BUG-17).
+            profile = nil
             recommendations = []
             isLoading = false
             return
@@ -303,26 +318,6 @@ public final class DiscoveryViewModel: ObservableObject {
         await load()
     }
     
-    private var mockProfile: AstryxTasteProfile {
-        AstryxTasteProfile(
-            topGenres: [
-                TasteGenre(name: "Indie", playCount: 120, percentage: 0.35, color: "#10B981"),
-                TasteGenre(name: "Rock", playCount: 80, percentage: 0.25, color: "#EF4444"),
-                TasteGenre(name: "Lo-Fi", playCount: 60, percentage: 0.20, color: "#6B7280")
-            ],
-            topArtists: [
-                TasteArtist(name: "Tame Impala", playCount: 45, trackCount: 12, percentage: 0.3),
-                TasteArtist(name: "Khruangbin", playCount: 38, trackCount: 8, percentage: 0.25)
-            ],
-            mood: TasteMood(primary: "Chill", energy: 0.35, valence: 0.55),
-            totalPlays: 342,
-            totalTracks: 240,
-            totalDuration: 86400,
-            favoriteCount: 42,
-            listeningTime: 123456,
-            diversityScore: 0.72
-        )
-    }
 }
 
 private struct SectionHeader: View {

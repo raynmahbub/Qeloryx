@@ -23,7 +23,17 @@ public struct AstryxSearchResult: Identifiable, Sendable, Equatable {
     public let score: Double
     public let matchedFields: [String]
     
-    public init(id: String = UUID().uuidString, type: SearchResultType, title: String, subtitle: String, trackID: String? = nil, albumID: String? = nil, artistID: String? = nil, score: Double, matchedFields: [String] = []) {
+    public init(
+        id: String = UUID().uuidString,
+        type: SearchResultType,
+        title: String,
+        subtitle: String,
+        trackID: String? = nil,
+        albumID: String? = nil,
+        artistID: String? = nil,
+        score: Double,
+        matchedFields: [String] = []
+    ) {
         self.id = id
         self.type = type
         self.title = title

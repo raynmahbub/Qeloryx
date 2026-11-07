@@ -84,7 +84,7 @@ public enum AstryxDownloadState: String, Sendable, Equatable, CaseIterable {
     }
 }
 
-public enum DownloadError: Error, Sendable, Equatable {
+public enum DownloadError: Error, Sendable, Equatable, Codable {
     case networkError(String)
     case fileSystemError(String)
     case cancelled
@@ -92,6 +92,9 @@ public enum DownloadError: Error, Sendable, Equatable {
     case invalidURL
     case httpError(Int)
     case resumeDataCorrupted
+    /// No download session is configured, so nothing can be fetched. This used
+    /// to fall back to a simulation that reported success (BUG-10 honesty).
+    case noDownloadSession
     case unknown(String)
     
     public var localizedDescription: String {
@@ -103,6 +106,7 @@ public enum DownloadError: Error, Sendable, Equatable {
         case .invalidURL: return "Invalid URL"
         case .httpError(let code): return "HTTP error: \(code)"
         case .resumeDataCorrupted: return "Resume data corrupted"
+        case .noDownloadSession: return "Downloads are unavailable in this build"
         case .unknown(let msg): return "Unknown error: \(msg)"
         }
     }
@@ -111,7 +115,7 @@ public enum DownloadError: Error, Sendable, Equatable {
         switch self {
         case .networkError, .httpError, .unknown, .resumeDataCorrupted:
             return true
-        case .fileSystemError, .cancelled, .noSpace, .invalidURL:
+        case .fileSystemError, .cancelled, .noSpace, .invalidURL, .noDownloadSession:
             return false
         }
     }

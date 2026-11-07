@@ -11,7 +11,7 @@ public protocol DownloadSessionDelegate: AnyObject, Sendable {
 }
 
 public protocol DownloadSessionProtocol: Sendable {
-    var delegate: DownloadSessionDelegate? { get set }
+    var delegate: (any DownloadSessionDelegate)? { get set }
     func startDownload(taskID: String, from url: URL, resumeData: Data?)
     func pauseDownload(taskID: String, completion: @escaping (Data?) -> Void)
     func cancelDownload(taskID: String)

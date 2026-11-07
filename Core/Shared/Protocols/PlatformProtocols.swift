@@ -32,7 +32,7 @@ public protocol AVFoundationAdapterDelegate: AnyObject {
 // MARK: - Audio Player Adapter Protocol
 
 public protocol AudioPlayerAdapterProtocol: AnyObject, Sendable {
-    var delegate: AVFoundationAdapterDelegate? { get set }
+    var delegate: (any AVFoundationAdapterDelegate)? { get set }
     
     func load(url: URL) throws
     func load(track: AstryxTrack) throws
@@ -105,7 +105,7 @@ public protocol HapticEngineProtocol: AnyObject, Sendable {
 // MARK: - Fallback Implementations for Core-only builds (Linux/SPM without Platform)
 
 public final class FallbackAudioPlayerAdapter: AudioPlayerAdapterProtocol, @unchecked Sendable {
-    public weak var delegate: AVFoundationAdapterDelegate?
+    public weak var delegate: (any AVFoundationAdapterDelegate)?
     public init() {}
     public func load(url: URL) throws {}
     public func load(track: AstryxTrack) throws {}

@@ -1,7 +1,12 @@
 // QELORYX — EventBus
 // QeloryxEvent.swift
-// Greenfield — Qeloryx Labs
 // All domain events are typed, no UIKit/SwiftUI types allowed
+//
+// BUG-05 fix: the audio-session event used to carry a free-form `reason`
+// String that consumers matched with `contains("shouldResume_true")`. The
+// stringly-typed contract broke silently whenever the producer's wording
+// changed, and it could not express route changes at all. It now carries a
+// typed payload.
 
 import Foundation
 
@@ -10,7 +15,7 @@ import Foundation
 /// Central event enum for QELORYX.
 /// Loose coupling: Emitters don't know listeners.
 public enum QeloryxEvent: Sendable, Equatable {
-    
+
     // MARK: Playback
     case trackStarted(trackID: String, queueID: String)
     case trackPaused(trackID: String, position: TimeInterval)
@@ -19,8 +24,8 @@ public enum QeloryxEvent: Sendable, Equatable {
     case trackSeeked(trackID: String, from: TimeInterval, to: TimeInterval)
     case queueChanged(queueID: String, version: Int)
     case playbackStateChanged(state: PlaybackStateSnapshot)
-    case audioSessionInterrupted(reason: String)
-    
+    case audioSessionInterrupted(interruption: AudioSessionInterruption)
+
     // MARK: Library
     case libraryDidChange(changeType: LibraryChangeType)
     case trackAdded(id: String)
@@ -33,27 +38,27 @@ public enum QeloryxEvent: Sendable, Equatable {
     case indexingStarted
     case indexingProgress(completed: Int, total: Int)
     case indexingCompleted(newTracks: Int)
-    
+
     // MARK: Search
     case searchIndexUpdated(version: Int)
     case searchQueryChanged(query: String)
-    
+
     // MARK: Download
     case downloadStateChanged(taskID: String, state: DownloadStateSnapshot)
     case downloadProgress(taskID: String, progress: Double)
     case downloadCompleted(taskID: String, trackID: String)
     case downloadFailed(taskID: String, error: String)
-    
+
     // MARK: System
     case appDidEnterBackground
     case appWillEnterForeground
     case storageLowWarning
     case batteryStateChanged(level: Float)
-    
+
     // MARK: Discovery
     case tasteProfileUpdated(profileID: String)
     case timeCapsuleGenerated(date: Date)
-    
+
     // MARK: Spaces
     case spaceQueueChanged(spaceID: String)
     case djHandoffInitiated(spaceID: String, fromUser: String, toUser: String)
@@ -77,6 +82,18 @@ public enum LibraryChangeType: String, Sendable, Equatable {
     case metadata
 }
 
+/// Why the audio session was interrupted / gave up its route.
+public enum AudioSessionInterruption: Sendable, Equatable {
+    /// The system took the session (call, Siri, another app).
+    case began
+    /// The interruption finished. `shouldResume` is the system's advice; the
+    /// engine additionally requires that *it* was playing when interrupted.
+    case ended(shouldResume: Bool)
+    /// The output route changed — typically headphones were unplugged.
+    /// Playback must pause rather than switch to the built-in speaker.
+    case oldDeviceUnavailable
+}
+
 public struct PlaybackStateSnapshot: Sendable, Equatable {
     public let trackID: String?
     public let isPlaying: Bool
@@ -85,8 +102,16 @@ public struct PlaybackStateSnapshot: Sendable, Equatable {
     public let queueVersion: Int
     public let shuffleEnabled: Bool
     public let repeatMode: RepeatModeSnapshot
-    
-    public init(trackID: String?, isPlaying: Bool, position: TimeInterval, duration: TimeInterval, queueVersion: Int, shuffleEnabled: Bool, repeatMode: RepeatModeSnapshot) {
+
+    public init(
+        trackID: String?,
+        isPlaying: Bool,
+        position: TimeInterval,
+        duration: TimeInterval,
+        queueVersion: Int,
+        shuffleEnabled: Bool,
+        repeatMode: RepeatModeSnapshot
+    ) {
         self.trackID = trackID
         self.isPlaying = isPlaying
         self.position = position
@@ -107,7 +132,7 @@ public struct DownloadStateSnapshot: Sendable, Equatable {
     public let state: String
     public let progress: Double
     public let error: String?
-    
+
     public init(state: String, progress: Double, error: String? = nil) {
         self.state = state
         self.progress = progress
@@ -156,4 +181,5 @@ public extension QeloryxEvent {
         case .liveReaction: return "liveReaction"
         }
     }
+
 }

@@ -3,7 +3,14 @@
 // QEL-041 Downloads — State machine, priority, enqueue/pause/resume/cancel/retry, offline optimization
 
 import XCTest
+#if canImport(QeloryxCore)
 @testable import QeloryxCore
+#else
+// The XcodeGen app target is a single module named `Qeloryx` (App + Core +
+// Features + Platform + DesignSystem compiled together), so `QeloryxCore` does
+// not exist there. `swift test` uses the multi-module SPM targets above.
+@testable import Qeloryx
+#endif
 
 final class DownloadsTests: XCTestCase {
     
@@ -11,8 +18,11 @@ final class DownloadsTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        // Use simulation mode (no real URLSession) for tests
-        engine = AstryxDownloadEngine(maxConcurrent: 2, useRealSession: false)
+        // No download session and an in-memory task store: the state machine
+        // is exercised without touching the network. There is no longer a
+        // "simulation mode" flag — an absent session *is* the test mode, and
+        // production always supplies the real one through AppDependencies.
+        engine = AstryxDownloadEngine(maxConcurrent: 2)
     }
     
     func testStateMachineTransitions() {

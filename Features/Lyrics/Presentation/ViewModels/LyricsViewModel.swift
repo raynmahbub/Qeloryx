@@ -55,8 +55,8 @@ public final class LyricsViewModel: ObservableObject {
     private var currentTrack: AstryxTrack?
     
     public init(
-        lyricsEngine: any LyricsEngineProtocol = AstryxLyricsEngine(),
-        playerEngine: any AstryxAudioEngineProtocol = AstryxAudioEngine(),
+        lyricsEngine: any LyricsEngineProtocol,
+        playerEngine: any AstryxAudioEngineProtocol,
         eventBus: any EventBusProtocol = AstryxEventBus.shared
     ) {
         self.lyricsEngine = lyricsEngine

@@ -40,6 +40,16 @@ public protocol LibraryEngineProtocol: Sendable {
     
     func toggleFavorite(trackID: String) async throws
     func recordPlay(trackID: String) async throws
+
+    // Playlists — persisted, not stubbed
+    func fetchPlaylists() async throws -> [AstryxPlaylist]
+    func createPlaylist(name: String, trackIDs: [String]) async throws -> AstryxPlaylist
+    func updatePlaylist(_ playlist: AstryxPlaylist) async throws
+    func deletePlaylist(id: String) async throws
+
+    /// Inserts a track that has already been validated (downloads, imports).
+    /// Returns the stored track, or the existing one when a duplicate is found.
+    func upsertTrack(_ track: AstryxTrack) async throws -> AstryxTrack
     
     // Indexing
     func startIndexing(rootURLs: [URL]) async throws -> IndexingResult
@@ -73,19 +83,24 @@ public struct LibraryStats: Sendable {
 
 public final class AstryxLibraryEngine: LibraryEngineProtocol {
     
-    private let storage: any SwiftDataStackProtocol
-    private let indexer: any LibraryIndexerProtocol
-    private let fileScanner: any FileScannerProtocol
-    private let artworkCache: any ArtworkCacheProtocol
-    private let eventBus: any EventBusProtocol
-    private let metadataEngine: any MetadataEngineProtocol
+    // `internal` (not `private`): playlist/upsert code lives in a sibling
+    // extension file after the type_body_length split.
+    let storage: any SwiftDataStackProtocol
+    let indexer: any LibraryIndexerProtocol
+    let fileScanner: any FileScannerProtocol
+    let artworkCache: any ArtworkCacheProtocol
+    let eventBus: any EventBusProtocol
+    let metadataEngine: any MetadataEngineProtocol
     
     // Known files for incremental indexing: path -> modification date
-    private var knownFiles: [String: Date] = [:]
-    private let knownFilesLock = NSLock()
+    var knownFiles: [String: Date] = [:]
+    let knownFilesLock = NSLock()
     
+    /// Storage is a required dependency: the engine must never silently fall
+    /// back to an in-memory store in production (BUG-01). Tests inject
+    /// `InMemorySwiftDataStack()` explicitly.
     public init(
-        storage: any SwiftDataStackProtocol = InMemorySwiftDataStack(),
+        storage: any SwiftDataStackProtocol,
         indexer: any LibraryIndexerProtocol = AstryxLibraryIndexer(),
         fileScanner: any FileScannerProtocol = AstryxFileScanner(),
         artworkCache: any ArtworkCacheProtocol = AstryxFileSystemArtworkCache(),
@@ -251,8 +266,12 @@ public final class AstryxLibraryEngine: LibraryEngineProtocol {
                 // Extract metadata
                 let rawMetadata = try await metadataEngine.extractMetadata(from: discovered.url)
                 
-                // Calculate checksum for duplicate detection (simplified: file size + name)
-                let checksum = "\(discovered.fileSize)_\(discovered.url.lastPathComponent)"
+                // Content-derived fingerprint (BUG-14). The old size+filename
+                // value collided across albums and broke on rename.
+                let checksum = AstryxContentChecksum.fingerprint(
+                    at: discovered.url,
+                    fileSize: discovered.fileSize
+                )
                 
                 let track = AstryxTrack(
                     title: rawMetadata.title ?? discovered.url.deletingPathExtension().lastPathComponent,
@@ -267,11 +286,16 @@ public final class AstryxLibraryEngine: LibraryEngineProtocol {
                     fileURL: discovered.url,
                     fileFormat: discovered.format,
                     fileSize: discovered.fileSize,
+                    bitRate: rawMetadata.bitRate,
+                    sampleRate: rawMetadata.sampleRate,
+                    isLossless: discovered.format.isLossless,
                     artworkData: rawMetadata.artworkData,
                     dateAdded: Date(),
                     dateModified: discovered.modificationDate,
+                    lyrics: rawMetadata.lyrics,
                     folderPath: discovered.url.deletingLastPathComponent().path,
-                    checksum: checksum
+                    checksum: checksum,
+                    libraryID: discovered.libraryID
                 )
                 
                 newTracks.append(track)
@@ -354,7 +378,10 @@ public final class AstryxLibraryEngine: LibraryEngineProtocol {
         for discovered in scanResult.discoveredFiles {
             do {
                 let rawMetadata = try await metadataEngine.extractMetadata(from: discovered.url)
-                let checksum = "\(discovered.fileSize)_\(discovered.url.lastPathComponent)"
+                let checksum = AstryxContentChecksum.fingerprint(
+                    at: discovered.url,
+                    fileSize: discovered.fileSize
+                )
                 
                 let track = AstryxTrack(
                     title: rawMetadata.title ?? discovered.url.deletingPathExtension().lastPathComponent,
@@ -369,11 +396,16 @@ public final class AstryxLibraryEngine: LibraryEngineProtocol {
                     fileURL: discovered.url,
                     fileFormat: discovered.format,
                     fileSize: discovered.fileSize,
+                    bitRate: rawMetadata.bitRate,
+                    sampleRate: rawMetadata.sampleRate,
+                    isLossless: discovered.format.isLossless,
                     artworkData: rawMetadata.artworkData,
                     dateAdded: Date(),
                     dateModified: discovered.modificationDate,
+                    lyrics: rawMetadata.lyrics,
                     folderPath: discovered.url.deletingLastPathComponent().path,
-                    checksum: checksum
+                    checksum: checksum,
+                    libraryID: discovered.libraryID
                 )
                 
                 newTracks.append(track)
@@ -405,39 +437,4 @@ public final class AstryxLibraryEngine: LibraryEngineProtocol {
         return [result]
     }
     
-    public func scanForDuplicates() async throws -> [[AstryxTrack]] {
-        let allTracks = try await storage.fetchTracks(predicate: nil)
-        let indexer = AstryxLibraryIndexer()
-        return indexer.detectDuplicates(in: allTracks)
-    }
-    
-    public func stats() async throws -> LibraryStats {
-        let trackCount = try await storage.totalTrackCount()
-        let albums = try await storage.fetchAlbums()
-        let artists = try await storage.fetchArtists()
-        let totalDuration = try await storage.totalDuration()
-        let totalSize = try await storage.totalSize()
-        let favorites = try await storage.fetchFavorites()
-        
-        return LibraryStats(
-            trackCount: trackCount,
-            albumCount: albums.count,
-            artistCount: artists.count,
-            totalDuration: totalDuration,
-            totalSize: totalSize,
-            favoriteCount: favorites.count
-        )
-    }
-}
-
-public enum LibraryError: Error, LocalizedError {
-    case libraryNotFound(id: String)
-    case indexingFailed(String)
-    
-    public var errorDescription: String? {
-        switch self {
-        case .libraryNotFound(let id): return "Library not found: \(id)"
-        case .indexingFailed(let msg): return "Indexing failed: \(msg)"
-        }
-    }
 }

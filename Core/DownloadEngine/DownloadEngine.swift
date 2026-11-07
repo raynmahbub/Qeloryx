@@ -25,40 +25,76 @@ public protocol DownloadEngineProtocol: Sendable {
 
 public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Sendable {
     
-    private var tasks: [String: AstryxDownloadTask] = [:]
-    private var queue: [String] = [] // Ordered by priority
-    private let lock = NSLock()
-    private let eventBus: any EventBusProtocol
-    private var activeDownloads: Set<String> = []
-    private let maxConcurrentDownloads: Int
-    private var downloadSession: (any DownloadSessionProtocol)?
-    
-    // For testing / fallback without URLSession (Linux)
-    private let useRealSession: Bool
-    
+    // `internal` rather than `private`: the queue/delegate/ingestion code
+    // lives in sibling extensions (type_body_length split) and must reach it.
+    var tasks: [String: AstryxDownloadTask] = [:]
+    var queue: [String] = [] // Ordered by priority
+    let lock = NSLock()
+    let eventBus: any EventBusProtocol
+    var activeDownloads: Set<String> = []
+    let maxConcurrentDownloads: Int
+    var downloadSession: (any DownloadSessionProtocol)?
+
+    /// Persistence for the task table (BUG-09). Without it a paused download
+    /// vanished on relaunch and nothing could be reconciled with the session.
+    let taskStore: any DownloadTaskStoring
+
+    /// Hand-off to the library once a file lands (BUG-10). Optional so the
+    /// engine stays usable in isolation and in tests.
+    let library: (any LibraryEngineProtocol)?
+
+    /// Injected metadata reader so completed downloads get real tags and
+    /// artwork instead of being indexed as "Unknown Artist".
+    let metadataEngine: any MetadataEngineProtocol
+
     public init(
         eventBus: any EventBusProtocol = AstryxEventBus.shared,
         downloadSession: (any DownloadSessionProtocol)? = nil,
         maxConcurrent: Int = 3,
-        useRealSession: Bool = true
+        taskStore: any DownloadTaskStoring = InMemoryDownloadTaskStore(),
+        library: (any LibraryEngineProtocol)? = nil,
+        metadataEngine: any MetadataEngineProtocol = AstryxMetadataEngine()
     ) {
         self.eventBus = eventBus
         self.maxConcurrentDownloads = maxConcurrent
-        self.useRealSession = useRealSession
         self.downloadSession = downloadSession
-        
-        // If no session injected and we want real session, create platform manager via factory
-        // To respect layer isolation, session is injected from Platform layer (App layer)
-        // If nil, fallback to simulation (tests/Linux)
-        if self.downloadSession == nil && useRealSession {
-            #if !canImport(FoundationNetworking)
-            // On Apple platforms, if no session injected, we still work with simulation until Platform injects
-            // Real app injects AstryxDownloadSessionManager from Platform
-            #endif
+        self.taskStore = taskStore
+        self.library = library
+        self.metadataEngine = metadataEngine
+
+        // Restore the persisted table before anyone can observe the engine.
+        let restored = taskStore.load()
+        for task in restored {
+            tasks[task.id] = task
+            // Anything that claimed to be in flight when the process died is
+            // put back in the queue rather than left stuck.
+            if task.state == .downloading || task.state == .retry {
+                var recovered = task
+                recovered.state = .queued
+                tasks[task.id] = recovered
+                insertIntoQueue(taskID: task.id, priority: task.priority)
+            } else if task.state == .queued {
+                insertIntoQueue(taskID: task.id, priority: task.priority)
+            }
         }
-        
-        // Set self as delegate if session exists
+
         self.downloadSession?.delegate = self
+    }
+
+    /// Thread-safe read of one task, used where the old code kept a stale copy
+    /// across an `await` (a data race on the mutable `tasks` dictionary).
+    func currentTaskSnapshot(taskID: String) -> AstryxDownloadTask? {
+        lock.lock()
+        defer { lock.unlock() }
+        return tasks[taskID]
+    }
+
+    /// Persists the current task table. Called after every state transition.
+    func persist() {
+        lock.lock()
+        let snapshot = Array(tasks.values)
+        lock.unlock()
+        taskStore.save(snapshot)
     }
     
     public func injectSession(_ session: any DownloadSessionProtocol) {
@@ -97,11 +133,15 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
     
     public func enqueue(track: AstryxTrack, sourceURL: URL, priority: DownloadPriority = .normal) async -> String {
         // Create destination URL in Documents/Qeloryx/Downloads
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let docs = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)
+            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let downloadsDir = docs.appendingPathComponent("Qeloryx/Downloads", isDirectory: true)
         try? FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
         
-        let ext = sourceURL.pathExtension.isEmpty ? track.fileFormat.fileExtensions.first ?? "mp3" : sourceURL.pathExtension
+        let ext = sourceURL.pathExtension.isEmpty
+            ? (track.fileFormat.fileExtensions.first ?? "mp3")
+            : sourceURL.pathExtension
         let fileName = "\(track.artist) - \(track.title).\(ext)".replacingOccurrences(of: "/", with: "-")
         let destURL = downloadsDir.appendingPathComponent(fileName)
         
@@ -120,7 +160,7 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
     
     public func pause(taskID: String) async {
         lock.lock()
-        guard var task = tasks[taskID], task.state.canPause else {
+        guard let task = tasks[taskID], task.state.canPause else {
             lock.unlock()
             return
         }
@@ -145,7 +185,6 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
                 current.resumeData = resumeData
                 activeDownloads.remove(taskID)
                 tasks[taskID] = current
-                task = current
             }
             lock.unlock()
         } else {
@@ -155,12 +194,12 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
                 current.state = .paused
                 activeDownloads.remove(taskID)
                 tasks[taskID] = current
-                task = current
             }
             lock.unlock()
         }
         
-        publishState(taskID: taskID, state: .paused, progress: task.progress)
+        let pausedProgress = currentTaskSnapshot(taskID: taskID)?.progress ?? 0
+        publishState(taskID: taskID, state: .paused, progress: pausedProgress)
         await processQueue() // Process next in queue
     }
     
@@ -187,7 +226,7 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
     
     public func cancel(taskID: String) async {
         lock.lock()
-        guard var task = tasks[taskID] else {
+        guard let task = tasks[taskID] else {
             lock.unlock()
             return
         }
@@ -204,13 +243,18 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
             current.state = .cancelled
             current.error = .cancelled
             tasks[taskID] = current
-            task = current
         }
         activeDownloads.remove(taskID)
         queue.removeAll { $0 == taskID }
         lock.unlock()
         
-        publishState(taskID: taskID, state: .cancelled, progress: task.progress, error: task.error?.localizedDescription)
+        let cancelled = currentTaskSnapshot(taskID: taskID)
+        publishState(
+            taskID: taskID,
+            state: .cancelled,
+            progress: cancelled?.progress ?? 0,
+            error: cancelled?.error?.localizedDescription
+        )
         
         await processQueue()
     }
@@ -271,6 +315,7 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
         activeDownloads.remove(taskID)
         lock.unlock()
         
+        persist()
         // Optionally delete file
         try? FileManager.default.removeItem(at: task.destinationURL)
     }
@@ -364,243 +409,4 @@ public final class AstryxDownloadEngine: DownloadEngineProtocol, @unchecked Send
         }
     }
     
-    // MARK: - Private Queue Management
-    
-    private func insertIntoQueue(taskID: String, priority: DownloadPriority) {
-        queue.removeAll { $0 == taskID }
-        
-        var inserted = false
-        for (index, existingID) in queue.enumerated() {
-            if let existingTask = tasks[existingID], existingTask.priority < priority {
-                queue.insert(taskID, at: index)
-                inserted = true
-                break
-            }
-        }
-        if !inserted {
-            queue.append(taskID)
-        }
-    }
-    
-    private func processQueue() async {
-        lock.lock()
-        guard activeDownloads.count < maxConcurrentDownloads, !queue.isEmpty else {
-            lock.unlock()
-            return
-        }
-        
-        // Get next task that is queued or retry
-        var nextID: String?
-        var nextTask: AstryxDownloadTask?
-        
-        for id in queue {
-            if let task = tasks[id], (task.state == .queued || task.state == .retry) {
-                nextID = id
-                nextTask = task
-                break
-            }
-        }
-        
-        guard let taskID = nextID, var task = nextTask else {
-            lock.unlock()
-            return
-        }
-        
-        // Validate transition
-        guard task.state.canTransition(to: .downloading) else {
-            queue.removeAll { $0 == taskID }
-            lock.unlock()
-            return
-        }
-        
-        queue.removeAll { $0 == taskID }
-        task.state = .downloading
-        task.startedAt = Date()
-        task.error = nil
-        tasks[taskID] = task
-        activeDownloads.insert(taskID)
-        lock.unlock()
-        
-        publishState(taskID: taskID, state: .downloading, progress: task.progress)
-        
-        // Start actual download
-        if let session = downloadSession {
-            session.startDownload(taskID: taskID, from: task.sourceURL, resumeData: task.resumeData)
-        } else {
-            // Fallback simulation for tests/Linux
-            Task {
-                await simulateDownload(taskID: taskID)
-            }
-        }
-    }
-    
-    private func simulateDownload(taskID: String) async {
-        // Fallback simulation for environments without URLSession background support
-        for i in 1...10 {
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
-            
-            lock.lock()
-            guard var task = tasks[taskID], task.state == .downloading else {
-                lock.unlock()
-                return
-            }
-            task.progress = Double(i) / 10.0
-            task.bytesDownloaded = Int64(Double(task.totalBytes ?? 10_000_000) * task.progress)
-            tasks[taskID] = task
-            lock.unlock()
-            
-            eventBus.publish(.downloadProgress(taskID: taskID, progress: task.progress))
-        }
-        
-        lock.lock()
-        guard var task = tasks[taskID] else {
-            lock.unlock()
-            return
-        }
-        task.state = .completed
-        task.progress = 1.0
-        task.completedAt = Date()
-        task.bytesDownloaded = task.totalBytes ?? task.bytesDownloaded
-        tasks[taskID] = task
-        activeDownloads.remove(taskID)
-        lock.unlock()
-        
-        publishState(taskID: taskID, state: .completed, progress: 1.0)
-        eventBus.publish(.downloadCompleted(taskID: taskID, trackID: task.trackID ?? ""))
-        
-        await processQueue()
-    }
-    
-    private func publishState(taskID: String, state: AstryxDownloadState, progress: Double, error: String? = nil) {
-        eventBus.publish(.downloadStateChanged(taskID: taskID, state: DownloadStateSnapshot(state: state.rawValue, progress: progress, error: error)))
-    }
-}
-
-// MARK: - DownloadSessionDelegate — Platform callbacks
-
-extension AstryxDownloadEngine: DownloadSessionDelegate {
-    
-    public func downloadDidProgress(taskID: String, bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpected: Int64) {
-        lock.lock()
-        guard var task = tasks[taskID] else {
-            lock.unlock()
-            return
-        }
-        task.bytesDownloaded = totalBytesWritten
-        if totalBytesExpected > 0 {
-            task.totalBytes = totalBytesExpected
-            task.progress = Double(totalBytesWritten) / Double(totalBytesExpected)
-        }
-        tasks[taskID] = task
-        let progress = task.progress
-        lock.unlock()
-        
-        eventBus.publish(.downloadProgress(taskID: taskID, progress: progress))
-    }
-    
-    public func downloadDidComplete(taskID: String, location: URL) {
-        lock.lock()
-        guard var task = tasks[taskID] else {
-            lock.unlock()
-            return
-        }
-        lock.unlock()
-        
-        // Move file from temp location to destination
-        do {
-            let destDir = task.destinationURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
-            
-            if FileManager.default.fileExists(atPath: task.destinationURL.path) {
-                try FileManager.default.removeItem(at: task.destinationURL)
-            }
-            try FileManager.default.moveItem(at: location, to: task.destinationURL)
-            
-            lock.lock()
-            if var current = tasks[taskID] {
-                current.state = .completed
-                current.progress = 1.0
-                current.completedAt = Date()
-                current.bytesDownloaded = current.totalBytes ?? current.bytesDownloaded
-                tasks[taskID] = current
-                task = current
-            }
-            activeDownloads.remove(taskID)
-            lock.unlock()
-            
-            publishState(taskID: taskID, state: .completed, progress: 1.0)
-            eventBus.publish(.downloadCompleted(taskID: taskID, trackID: task.trackID ?? ""))
-            
-            Task {
-                await processQueue()
-            }
-            
-        } catch {
-            lock.lock()
-            if var current = tasks[taskID] {
-                current.state = .failed
-                current.error = .fileSystemError(error.localizedDescription)
-                tasks[taskID] = current
-            }
-            activeDownloads.remove(taskID)
-            lock.unlock()
-            
-            publishState(taskID: taskID, state: .failed, progress: task.progress, error: error.localizedDescription)
-            
-            Task {
-                await processQueue()
-            }
-        }
-    }
-    
-    public func downloadDidFail(taskID: String, error: Error, resumeData: Data?) {
-        lock.lock()
-        guard var task = tasks[taskID] else {
-            lock.unlock()
-            return
-        }
-        
-        // Save resume data
-        task.resumeData = resumeData
-        
-        // Check if retryable and retries left
-        let downloadError: DownloadError
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .cancelled:
-                downloadError = .cancelled
-            case .notConnectedToInternet, .timedOut, .networkConnectionLost:
-                downloadError = .networkError(urlError.localizedDescription)
-            default:
-                downloadError = .networkError(urlError.localizedDescription)
-            }
-        } else {
-            downloadError = .networkError(error.localizedDescription)
-        }
-        
-        task.error = downloadError
-        
-        if downloadError.isRetryable && task.retryCount < task.maxRetries {
-            task.state = .retry
-            tasks[taskID] = task
-            lock.unlock()
-            
-            publishState(taskID: taskID, state: .retry, progress: task.progress, error: downloadError.localizedDescription)
-            
-            Task {
-                await retry(taskID: taskID)
-            }
-        } else {
-            task.state = .failed
-            tasks[taskID] = task
-            activeDownloads.remove(taskID)
-            lock.unlock()
-            
-            publishState(taskID: taskID, state: .failed, progress: task.progress, error: downloadError.localizedDescription)
-            
-            Task {
-                await processQueue()
-            }
-        }
-    }
 }

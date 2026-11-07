@@ -50,7 +50,9 @@ public final class AstryxFileScanner: FileScannerProtocol {
     public init() {
         // Build set of supported extensions from AudioFormat
         var exts = Set<String>()
-        for format in AudioFormat.supportedFormats {
+        // Index recognised formats too, so an Ogg file surfaces as
+        // "needs a decoder" instead of silently vanishing (BUG-21).
+        for format in AudioFormat.supportedFormats + AudioFormat.recognisedButUndecodableFormats {
             for fileExt in format.fileExtensions {
                 exts.insert(fileExt.lowercased())
             }

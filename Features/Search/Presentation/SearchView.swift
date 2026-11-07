@@ -9,8 +9,8 @@ public struct SearchView: View {
     @StateObject private var viewModel: SearchViewModel
     @Environment(\.searchEngine) private var searchEngineEnv
     
-    public init(viewModel: SearchViewModel = SearchViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+    public init(searchEngine: any SearchEngineProtocol) {
+        _viewModel = StateObject(wrappedValue: SearchViewModel(searchEngine: searchEngine))
     }
     
     public var body: some View {

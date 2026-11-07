@@ -65,6 +65,10 @@ Temporary Items
 # SwiftLint
 .swiftlint.cache
 
+# Python (brand asset generator)
+__pycache__/
+*.pyc
+
 # Environment
 .env
 .env.local

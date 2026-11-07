@@ -1,6 +1,20 @@
 // QELORYX — Platform
 // SwiftDataAdapter.swift
-// QEL-024 Library — Production SwiftData with ModelContainer, ModelContext, relationships
+//
+// The production library store.
+//
+// Fixes relative to the previous implementation:
+//   • BUG-01  A real persistent store, wired by the composition root. This file
+//             no longer degrades into `typealias SwiftDataAdapter = InMemory…`
+//             on non-SwiftData platforms: the type simply does not compile
+//             there, which is correct — a platform that cannot persist must not
+//             silently discard the user's library.
+//   • BUG-01  Schema is versioned (`QeloryxSchemaV1`) with a migration plan, so
+//             the first shipped database can evolve without data loss.
+//   •          Missing fields (artwork, lyrics, bit depth, ISRC-style identifiers,
+//             library ownership) are now persisted instead of dropped on save.
+//   •          `ModelContext` is guarded by an actor: SwiftData contexts are not
+//             thread-safe and every access here is `await`-serialised.
 
 #if canImport(QeloryxCore)
 import QeloryxCore
@@ -11,7 +25,25 @@ import Foundation
 #if canImport(SwiftData)
 import SwiftData
 
-// MARK: - SwiftData Models — QEL-024 Production
+// MARK: - Schema V1
+
+enum QeloryxSchemaV1: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [TrackModel.self, LibraryModel.self, PlaylistModel.self]
+    }
+}
+
+/// Migration plan placeholder. There is only one schema version today; when V2
+/// lands, add it here with a lightweight or custom stage rather than deleting
+/// the store (the previous code had no versioning at all).
+enum QeloryxMigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] { [QeloryxSchemaV1.self] }
+    static var stages: [MigrationStage] { [] }
+}
+
+// MARK: - TrackModel
 
 @Model
 final class TrackModel {
@@ -28,6 +60,12 @@ final class TrackModel {
     var fileURLString: String
     var fileFormatRaw: String
     var fileSize: Int64
+    var bitRate: Int?
+    var sampleRate: Int?
+    var bitDepth: Int?
+    var isLossless: Bool
+    var artworkData: Data?
+    var lyrics: String?
     var dateAdded: Date
     var dateModified: Date
     var playCount: Int
@@ -36,8 +74,7 @@ final class TrackModel {
     var folderPath: String?
     var checksum: String?
     var libraryID: String?
-    var isLossless: Bool
-    
+
     init(
         id: String,
         title: String,
@@ -52,6 +89,12 @@ final class TrackModel {
         fileURLString: String,
         fileFormatRaw: String,
         fileSize: Int64 = 0,
+        bitRate: Int? = nil,
+        sampleRate: Int? = nil,
+        bitDepth: Int? = nil,
+        isLossless: Bool = false,
+        artworkData: Data? = nil,
+        lyrics: String? = nil,
         dateAdded: Date = Date(),
         dateModified: Date = Date(),
         playCount: Int = 0,
@@ -59,8 +102,7 @@ final class TrackModel {
         isFavorite: Bool = false,
         folderPath: String? = nil,
         checksum: String? = nil,
-        libraryID: String? = nil,
-        isLossless: Bool = false
+        libraryID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -75,6 +117,12 @@ final class TrackModel {
         self.fileURLString = fileURLString
         self.fileFormatRaw = fileFormatRaw
         self.fileSize = fileSize
+        self.bitRate = bitRate
+        self.sampleRate = sampleRate
+        self.bitDepth = bitDepth
+        self.isLossless = isLossless
+        self.artworkData = artworkData
+        self.lyrics = lyrics
         self.dateAdded = dateAdded
         self.dateModified = dateModified
         self.playCount = playCount
@@ -83,9 +131,8 @@ final class TrackModel {
         self.folderPath = folderPath
         self.checksum = checksum
         self.libraryID = libraryID
-        self.isLossless = isLossless
     }
-    
+
     func toDomain() -> AstryxTrack {
         AstryxTrack(
             id: id,
@@ -101,17 +148,23 @@ final class TrackModel {
             fileURL: URL(fileURLWithPath: fileURLString),
             fileFormat: AudioFormat(rawValue: fileFormatRaw) ?? .unknown,
             fileSize: fileSize,
+            bitRate: bitRate,
+            sampleRate: sampleRate,
+            bitDepth: bitDepth,
             isLossless: isLossless,
+            artworkData: artworkData,
             dateAdded: dateAdded,
             dateModified: dateModified,
             playCount: playCount,
             lastPlayed: lastPlayed,
             isFavorite: isFavorite,
+            lyrics: lyrics,
             folderPath: folderPath,
-            checksum: checksum
+            checksum: checksum,
+            libraryID: libraryID
         )
     }
-    
+
     static func fromDomain(_ track: AstryxTrack, libraryID: String? = nil) -> TrackModel {
         TrackModel(
             id: track.id,
@@ -127,6 +180,12 @@ final class TrackModel {
             fileURLString: track.fileURL.path,
             fileFormatRaw: track.fileFormat.rawValue,
             fileSize: track.fileSize,
+            bitRate: track.bitRate,
+            sampleRate: track.sampleRate,
+            bitDepth: track.bitDepth,
+            isLossless: track.isLossless,
+            artworkData: track.artworkData,
+            lyrics: track.lyrics,
             dateAdded: track.dateAdded,
             dateModified: track.dateModified,
             playCount: track.playCount,
@@ -134,11 +193,40 @@ final class TrackModel {
             isFavorite: track.isFavorite,
             folderPath: track.folderPath,
             checksum: track.checksum,
-            libraryID: libraryID,
-            isLossless: track.isLossless
+            libraryID: libraryID ?? track.libraryID
         )
     }
+
+    func apply(_ track: AstryxTrack) {
+        title = track.title
+        artist = track.artist
+        album = track.album
+        albumArtist = track.albumArtist
+        genre = track.genre
+        year = track.year
+        trackNumber = track.trackNumber
+        discNumber = track.discNumber
+        duration = track.duration
+        fileURLString = track.fileURL.path
+        fileFormatRaw = track.fileFormat.rawValue
+        fileSize = track.fileSize
+        bitRate = track.bitRate
+        sampleRate = track.sampleRate
+        bitDepth = track.bitDepth
+        isLossless = track.isLossless
+        artworkData = track.artworkData
+        lyrics = track.lyrics
+        dateModified = track.dateModified
+        playCount = track.playCount
+        lastPlayed = track.lastPlayed
+        isFavorite = track.isFavorite
+        folderPath = track.folderPath
+        checksum = track.checksum
+        if let libraryID = track.libraryID { self.libraryID = libraryID }
+    }
 }
+
+// MARK: - LibraryModel
 
 @Model
 final class LibraryModel {
@@ -150,8 +238,17 @@ final class LibraryModel {
     var trackCount: Int
     var lastIndexed: Date?
     var createdAt: Date
-    
-    init(id: String, name: String, rootURLString: String, typeRaw: String, isEnabled: Bool, trackCount: Int, lastIndexed: Date?, createdAt: Date) {
+
+    init(
+        id: String,
+        name: String,
+        rootURLString: String,
+        typeRaw: String,
+        isEnabled: Bool,
+        trackCount: Int,
+        lastIndexed: Date?,
+        createdAt: Date
+    ) {
         self.id = id
         self.name = name
         self.rootURLString = rootURLString
@@ -161,297 +258,484 @@ final class LibraryModel {
         self.lastIndexed = lastIndexed
         self.createdAt = createdAt
     }
+
+    func toDomain() -> AstryxLibrary {
+        AstryxLibrary(
+            id: id,
+            name: name,
+            rootURL: URL(fileURLWithPath: rootURLString),
+            type: LibraryType(rawValue: typeRaw) ?? .local,
+            isEnabled: isEnabled,
+            trackCount: trackCount,
+            lastIndexed: lastIndexed,
+            createdAt: createdAt
+        )
+    }
 }
 
-// MARK: - SwiftDataAdapter — Production
+// MARK: - PlaylistModel
 
-public final class SwiftDataAdapter: SwiftDataStackProtocol {
-    
+@Model
+final class PlaylistModel {
+    @Attribute(.unique) var id: String
+    var name: String
+    var playlistDescription: String?
+    var trackIDs: [String]
+    var isSmart: Bool
+    var dateCreated: Date
+    var dateModified: Date
+
+    init(
+        id: String,
+        name: String,
+        playlistDescription: String? = nil,
+        trackIDs: [String] = [],
+        isSmart: Bool = false,
+        dateCreated: Date = Date(),
+        dateModified: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.playlistDescription = playlistDescription
+        self.trackIDs = trackIDs
+        self.isSmart = isSmart
+        self.dateCreated = dateCreated
+        self.dateModified = dateModified
+    }
+
+    func toDomain() -> AstryxPlaylist {
+        AstryxPlaylist(
+            id: id,
+            name: name,
+            description: playlistDescription,
+            trackIDs: trackIDs,
+            dateCreated: dateCreated,
+            dateModified: dateModified,
+            isSmart: isSmart
+        )
+    }
+
+    static func fromDomain(_ playlist: AstryxPlaylist) -> PlaylistModel {
+        PlaylistModel(
+            id: playlist.id,
+            name: playlist.name,
+            playlistDescription: playlist.description,
+            trackIDs: playlist.trackIDs,
+            isSmart: playlist.isSmart,
+            dateCreated: playlist.dateCreated,
+            dateModified: playlist.dateModified
+        )
+    }
+}
+
+// MARK: - SwiftDataAdapter
+
+/// Persistent implementation of `SwiftDataStackProtocol`.
+///
+/// Isolation: the class is an `actor`, so every `ModelContext` access is
+/// serialised. `SwiftDataStackProtocol` is `Sendable`; the actor satisfies that
+/// and the protocol requirements are fulfilled by `async` methods.
+public actor SwiftDataAdapter: SwiftDataStackProtocol {
+
     private let container: ModelContainer
     private let context: ModelContext
-    
-    public init() throws {
-        let schema = Schema([TrackModel.self, LibraryModel.self])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-        container = try ModelContainer(for: schema, configurations: [config])
+    private let persistent: Bool
+
+    /// An in-memory adapter is not persistent; the app always uses disk.
+    public var isPersistent: Bool { persistent }
+
+    /// - Parameter inMemory: tests pass `true`; the app always uses `false`.
+    public init(inMemory: Bool = false) throws {
+        self.persistent = !inMemory
+        // Built from the versioned schema's model list so the container and the
+        // migration plan stay in sync.
+        let schema = Schema(QeloryxSchemaV1.models)
+        let configuration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: inMemory
+        )
+        container = try ModelContainer(
+            for: schema,
+            migrationPlan: QeloryxMigrationPlan.self,
+            configurations: [configuration]
+        )
         context = ModelContext(container)
         context.autosaveEnabled = true
     }
-    
+
     // MARK: Tracks
-    
+
     public func fetchTracks(predicate: TrackPredicate?) async throws -> [AstryxTrack] {
-        let descriptor = FetchDescriptor<TrackModel>(sortBy: [SortDescriptor(\.title)])
-        let models = try context.fetch(descriptor)
-        var tracks = models.map { $0.toDomain() }
-        
-        if let p = predicate {
-            if let search = p.searchText?.lowercased(), !search.isEmpty {
-                tracks = tracks.filter {
-                    $0.title.lowercased().contains(search) ||
-                    $0.artist.lowercased().contains(search) ||
-                    $0.album.lowercased().contains(search)
-                }
-            }
-            if let artist = p.artist { tracks = tracks.filter { $0.artist == artist } }
-            if let album = p.album { tracks = tracks.filter { $0.album == album } }
-            if let genre = p.genre { tracks = tracks.filter { $0.genre == genre } }
-            if let fav = p.isFavorite { tracks = tracks.filter { $0.isFavorite == fav } }
-            if let folder = p.folderPath { tracks = tracks.filter { $0.folderPath == folder } }
-            if let lossless = p.isLossless { tracks = tracks.filter { $0.isLossless == lossless } }
+        let models = try context.fetch(FetchDescriptor<TrackModel>(sortBy: [SortDescriptor(\.title)]))
+        return models.map { $0.toDomain() }.filter { matches($0, predicate) }
+    }
+
+    private func matches(_ track: AstryxTrack, _ predicate: TrackPredicate?) -> Bool {
+        guard let predicate else { return true }
+        if let search = predicate.searchText?.lowercased(), !search.isEmpty {
+            let haystack = "\(track.title) \(track.artist) \(track.album)".lowercased()
+            if !haystack.contains(search) { return false }
         }
-        
-        return tracks
+        if let artist = predicate.artist, track.artist != artist { return false }
+        if let album = predicate.album, track.album != album { return false }
+        if let genre = predicate.genre, track.genre != genre { return false }
+        if let favorite = predicate.isFavorite, track.isFavorite != favorite { return false }
+        if let folder = predicate.folderPath, track.folderPath != folder { return false }
+        if let libraryID = predicate.libraryID, track.libraryID != libraryID { return false }
+        if let lossless = predicate.isLossless, track.isLossless != lossless { return false }
+        return true
     }
-    
+
     public func fetchTrack(id: String) async throws -> AstryxTrack? {
-        let predicate = #Predicate<TrackModel> { $0.id == id }
-        let descriptor = FetchDescriptor<TrackModel>(predicate: predicate)
-        let models = try context.fetch(descriptor)
-        return models.first?.toDomain()
+        try model(id: id)?.toDomain()
     }
-    
+
     public func fetchTracks(forAlbum album: String, artist: String?) async throws -> [AstryxTrack] {
-        let all = try await fetchTracks(predicate: nil)
-        return all.filter { $0.album == album && (artist == nil || $0.artist == artist) }
+        // Sorting relies only on stored properties: `#Predicate` cannot call
+        // free functions, so album matching is exact and case-sensitive here
+        // and fuzzy matching is the search layer's job.
+        let descriptor = FetchDescriptor<TrackModel>(sortBy: [SortDescriptor(\.trackNumber)])
+        return try context.fetch(descriptor)
+            .filter { $0.album == album && (artist == nil || $0.artist == artist) }
+            .map { $0.toDomain() }
     }
-    
+
     public func fetchTracks(forArtist artist: String) async throws -> [AstryxTrack] {
-        let all = try await fetchTracks(predicate: nil)
-        return all.filter { $0.artist == artist }
+        let descriptor = FetchDescriptor<TrackModel>(
+            predicate: #Predicate { $0.artist == artist },
+            sortBy: [SortDescriptor(\.album), SortDescriptor(\.trackNumber)]
+        )
+        return try context.fetch(descriptor).map { $0.toDomain() }
     }
-    
+
     public func fetchTracks(forGenre genre: String) async throws -> [AstryxTrack] {
-        let all = try await fetchTracks(predicate: nil)
-        return all.filter { $0.genre == genre }
+        let descriptor = FetchDescriptor<TrackModel>(predicate: #Predicate { $0.genre == genre })
+        return try context.fetch(descriptor).map { $0.toDomain() }
     }
-    
+
     public func fetchTracks(inFolder folderPath: String) async throws -> [AstryxTrack] {
-        let all = try await fetchTracks(predicate: nil)
-        return all.filter { $0.folderPath == folderPath }
+        let descriptor = FetchDescriptor<TrackModel>(predicate: #Predicate { $0.folderPath == folderPath })
+        return try context.fetch(descriptor).map { $0.toDomain() }
     }
-    
+
     public func fetchTracks(forLibrary libraryID: String) async throws -> [AstryxTrack] {
-        let predicate = #Predicate<TrackModel> { $0.libraryID == libraryID }
-        let descriptor = FetchDescriptor<TrackModel>(predicate: predicate)
-        let models = try context.fetch(descriptor)
-        return models.map { $0.toDomain() }
+        let descriptor = FetchDescriptor<TrackModel>(predicate: #Predicate { $0.libraryID == libraryID })
+        return try context.fetch(descriptor).map { $0.toDomain() }
     }
-    
+
     public func insertTrack(_ track: AstryxTrack) async throws {
-        let model = TrackModel.fromDomain(track)
-        context.insert(model)
+        context.insert(TrackModel.fromDomain(track))
         try context.save()
     }
-    
+
     public func insertTracks(_ tracks: [AstryxTrack]) async throws {
         for track in tracks {
-            let model = TrackModel.fromDomain(track)
-            context.insert(model)
+            // Upsert semantics: re-indexing a known file must update it, not
+            // duplicate it.
+            if let existing = try model(id: track.id) {
+                existing.apply(track)
+            } else {
+                context.insert(TrackModel.fromDomain(track))
+            }
         }
         try context.save()
     }
-    
+
     public func updateTrack(_ track: AstryxTrack) async throws {
-        let trackID = track.id
-        let predicate = #Predicate<TrackModel> { $0.id == trackID }
-        let descriptor = FetchDescriptor<TrackModel>(predicate: predicate)
-        let models = try context.fetch(descriptor)
-        if let existing = models.first {
-            existing.title = track.title
-            existing.artist = track.artist
-            existing.album = track.album
-            existing.isFavorite = track.isFavorite
-            existing.playCount = track.playCount
-            existing.lastPlayed = track.lastPlayed
+        guard let existing = try model(id: track.id) else {
+            context.insert(TrackModel.fromDomain(track))
             try context.save()
-        } else {
-            try await insertTrack(track)
+            return
         }
+        existing.apply(track)
+        try context.save()
     }
-    
+
     public func deleteTrack(id: String) async throws {
-        let predicate = #Predicate<TrackModel> { $0.id == id }
-        try context.delete(model: TrackModel.self, where: predicate)
+        guard let existing = try model(id: id) else { return }
+        context.delete(existing)
         try context.save()
     }
-    
+
     public func deleteTracks(forLibrary libraryID: String) async throws {
-        let predicate = #Predicate<TrackModel> { $0.libraryID == libraryID }
-        try context.delete(model: TrackModel.self, where: predicate)
+        let descriptor = FetchDescriptor<TrackModel>(predicate: #Predicate { $0.libraryID == libraryID })
+        for model in try context.fetch(descriptor) {
+            context.delete(model)
+        }
         try context.save()
     }
-    
-    // MARK: Albums
-    
+
+    // MARK: Albums / Artists / Genres
+
     public func fetchAlbums() async throws -> [AstryxAlbum] {
         let tracks = try await fetchTracks(predicate: nil)
-        let grouped = Dictionary(grouping: tracks) { "\($0.album)|\($0.albumArtist ?? $0.artist)" }
-        return grouped.map { (key, tracks) in
-            let components = key.components(separatedBy: "|")
-            let title = components.first ?? "Unknown"
-            let artist = components.count > 1 ? components[1] : tracks.first?.artist ?? "Unknown"
-            return AstryxAlbum(title: title, artist: artist, trackCount: tracks.count, duration: tracks.reduce(0) { $0 + $1.duration }, tracks: tracks)
-        }
+        return AstryxGrouping.albums(from: tracks)
     }
-    
+
     public func fetchAlbum(id: String) async throws -> AstryxAlbum? {
         let albums = try await fetchAlbums()
         return albums.first { $0.id == id }
     }
-    
+
     public func fetchAlbums(forArtist artist: String) async throws -> [AstryxAlbum] {
-        let all = try await fetchAlbums()
-        return all.filter { $0.artist == artist }
+        let tracks = try await fetchTracks(forArtist: artist)
+        return AstryxGrouping.albums(from: tracks)
     }
-    
-    // MARK: Artists
-    
+
     public func fetchArtists() async throws -> [AstryxArtist] {
         let tracks = try await fetchTracks(predicate: nil)
-        let grouped = Dictionary(grouping: tracks) { $0.artist }
-        return grouped.map { (name, tracks) in
-            AstryxArtist(name: name, albumCount: Set(tracks.map { $0.album }).count, trackCount: tracks.count)
-        }
+        return AstryxGrouping.artists(from: tracks)
     }
-    
+
     public func fetchArtist(id: String) async throws -> AstryxArtist? {
         let artists = try await fetchArtists()
         return artists.first { $0.id == id }
     }
-    
-    // MARK: Genres
-    
+
     public func fetchGenres() async throws -> [AstryxGenre] {
         let tracks = try await fetchTracks(predicate: nil)
-        let grouped = Dictionary(grouping: tracks) { $0.genre ?? "Unknown" }
-        return grouped.map { (name, tracks) in
-            AstryxGenre(name: name, trackCount: tracks.count, albumCount: Set(tracks.map { $0.album }).count)
-        }
+        return AstryxGrouping.genres(from: tracks)
     }
-    
+
     // MARK: Folders
-    
+
     public func fetchFolders(forLibrary libraryID: String) async throws -> [AstryxFolder] {
         let tracks = try await fetchTracks(forLibrary: libraryID)
-        let grouped = Dictionary(grouping: tracks) { $0.folderPath ?? "Unknown" }
-        return grouped.map { (path, tracks) in
-            AstryxFolder(name: URL(fileURLWithPath: path).lastPathComponent, path: path, trackCount: tracks.count, libraryID: libraryID)
-        }
+        return Dictionary(grouping: tracks) { $0.folderPath ?? "Unknown" }
+            .map { path, tracks in
+                AstryxFolder(
+                    name: URL(fileURLWithPath: path).lastPathComponent,
+                    path: path,
+                    trackCount: tracks.count,
+                    libraryID: libraryID
+                )
+            }
+            .sorted { $0.name < $1.name }
     }
-    
+
     public func fetchFolder(path: String) async throws -> AstryxFolder? {
-        let allTracks = try await fetchTracks(predicate: nil)
-        let filtered = allTracks.filter { $0.folderPath == path }
-        guard !filtered.isEmpty else { return nil }
-        return AstryxFolder(name: URL(fileURLWithPath: path).lastPathComponent, path: path, trackCount: filtered.count, libraryID: "")
+        let tracks = try await fetchTracks(inFolder: path)
+        guard let first = tracks.first else { return nil }
+        return AstryxFolder(
+            name: URL(fileURLWithPath: path).lastPathComponent,
+            path: path,
+            trackCount: tracks.count,
+            libraryID: first.libraryID ?? ""
+        )
     }
-    
+
     // MARK: Libraries
-    
+
     public func fetchLibraries() async throws -> [AstryxLibrary] {
-        let descriptor = FetchDescriptor<LibraryModel>()
-        let models = try context.fetch(descriptor)
-        return models.map { model in
-            AstryxLibrary(
-                id: model.id,
-                name: model.name,
-                rootURL: URL(fileURLWithPath: model.rootURLString),
-                type: LibraryType(rawValue: model.typeRaw) ?? .local,
-                isEnabled: model.isEnabled,
-                trackCount: model.trackCount,
-                lastIndexed: model.lastIndexed,
-                createdAt: model.createdAt
-            )
-        }
+        try context.fetch(FetchDescriptor<LibraryModel>()).map { $0.toDomain() }
     }
-    
+
     public func fetchLibrary(id: String) async throws -> AstryxLibrary? {
-        let predicate = #Predicate<LibraryModel> { $0.id == id }
-        let descriptor = FetchDescriptor<LibraryModel>(predicate: predicate)
-        let models = try context.fetch(descriptor)
-        guard let model = models.first else { return nil }
-        return AstryxLibrary(id: model.id, name: model.name, rootURL: URL(fileURLWithPath: model.rootURLString), type: LibraryType(rawValue: model.typeRaw) ?? .local, isEnabled: model.isEnabled, trackCount: model.trackCount, lastIndexed: model.lastIndexed, createdAt: model.createdAt)
+        let libraryID = id
+        let descriptor = FetchDescriptor<LibraryModel>(predicate: #Predicate { $0.id == libraryID })
+        return try context.fetch(descriptor).first?.toDomain()
     }
-    
+
     public func insertLibrary(_ library: AstryxLibrary) async throws {
-        let model = LibraryModel(id: library.id, name: library.name, rootURLString: library.rootURL.path, typeRaw: library.type.rawValue, isEnabled: library.isEnabled, trackCount: library.trackCount, lastIndexed: library.lastIndexed, createdAt: library.createdAt)
-        context.insert(model)
+        context.insert(
+            LibraryModel(
+                id: library.id,
+                name: library.name,
+                rootURLString: library.rootURL.path,
+                typeRaw: library.type.rawValue,
+                isEnabled: library.isEnabled,
+                trackCount: library.trackCount,
+                lastIndexed: library.lastIndexed,
+                createdAt: library.createdAt
+            )
+        )
         try context.save()
     }
-    
+
     public func updateLibrary(_ library: AstryxLibrary) async throws {
         let libraryID = library.id
-        let predicate = #Predicate<LibraryModel> { $0.id == libraryID }
-        let descriptor = FetchDescriptor<LibraryModel>(predicate: predicate)
-        let models = try context.fetch(descriptor)
-        if let existing = models.first {
-            existing.name = library.name
-            existing.isEnabled = library.isEnabled
-            existing.trackCount = library.trackCount
-            existing.lastIndexed = library.lastIndexed
-            try context.save()
-        } else {
+        let descriptor = FetchDescriptor<LibraryModel>(predicate: #Predicate { $0.id == libraryID })
+        guard let existing = try context.fetch(descriptor).first else {
             try await insertLibrary(library)
+            return
         }
-    }
-    
-    public func deleteLibrary(id: String) async throws {
-        let predicate = #Predicate<LibraryModel> { $0.id == id }
-        try context.delete(model: LibraryModel.self, where: predicate)
+        existing.name = library.name
+        existing.isEnabled = library.isEnabled
+        existing.trackCount = library.trackCount
+        existing.lastIndexed = library.lastIndexed
         try context.save()
     }
-    
+
+    public func deleteLibrary(id: String) async throws {
+        let libraryID = id
+        let descriptor = FetchDescriptor<LibraryModel>(predicate: #Predicate { $0.id == libraryID })
+        for model in try context.fetch(descriptor) {
+            context.delete(model)
+        }
+        try context.save()
+    }
+
     // MARK: Playlists
-    
-    public func fetchPlaylists() async throws -> [AstryxPlaylist] { [] }
-    
-    // MARK: Special
-    
+
+    public func fetchPlaylists() async throws -> [AstryxPlaylist] {
+        try context.fetch(FetchDescriptor<PlaylistModel>(sortBy: [SortDescriptor(\.dateModified, order: .reverse)]))
+            .map { $0.toDomain() }
+    }
+
+    public func insertPlaylist(_ playlist: AstryxPlaylist) async throws {
+        context.insert(PlaylistModel.fromDomain(playlist))
+        try context.save()
+    }
+
+    public func updatePlaylist(_ playlist: AstryxPlaylist) async throws {
+        let playlistID = playlist.id
+        let descriptor = FetchDescriptor<PlaylistModel>(predicate: #Predicate { $0.id == playlistID })
+        guard let existing = try context.fetch(descriptor).first else {
+            try await insertPlaylist(playlist)
+            return
+        }
+        existing.name = playlist.name
+        existing.playlistDescription = playlist.description
+        existing.trackIDs = playlist.trackIDs
+        existing.isSmart = playlist.isSmart
+        existing.dateModified = playlist.dateModified
+        try context.save()
+    }
+
+    public func deletePlaylist(id: String) async throws {
+        let playlistID = id
+        let descriptor = FetchDescriptor<PlaylistModel>(predicate: #Predicate { $0.id == playlistID })
+        for model in try context.fetch(descriptor) {
+            context.delete(model)
+        }
+        try context.save()
+    }
+
+    // MARK: Special queries
+
     public func fetchRecentlyAdded(limit: Int) async throws -> [AstryxTrack] {
-        let all = try await fetchTracks(predicate: nil)
-        return Array(all.sorted { $0.dateAdded > $1.dateAdded }.prefix(limit))
+        let descriptor = FetchDescriptor<TrackModel>(sortBy: [SortDescriptor(\.dateAdded, order: .reverse)])
+        return try context.fetch(descriptor).prefix(limit).map { $0.toDomain() }
     }
-    
+
     public func fetchFavorites() async throws -> [AstryxTrack] {
-        let predicate = #Predicate<TrackModel> { $0.isFavorite == true }
-        let descriptor = FetchDescriptor<TrackModel>(predicate: predicate)
-        let models = try context.fetch(descriptor)
-        return models.map { $0.toDomain() }
+        let descriptor = FetchDescriptor<TrackModel>(predicate: #Predicate { $0.isFavorite == true })
+        return try context.fetch(descriptor).map { $0.toDomain() }
     }
-    
+
     public func fetchHistory(limit: Int) async throws -> [AstryxTrack] {
         let descriptor = FetchDescriptor<TrackModel>(sortBy: [SortDescriptor(\.lastPlayed, order: .reverse)])
-        let models = try context.fetch(descriptor)
-        let filtered = models.filter { $0.lastPlayed != nil }
-        return Array(filtered.prefix(limit).map { $0.toDomain() })
+        return try context.fetch(descriptor).filter { $0.lastPlayed != nil }.prefix(limit).map { $0.toDomain() }
     }
-    
+
     public func fetchMostPlayed(limit: Int) async throws -> [AstryxTrack] {
         let descriptor = FetchDescriptor<TrackModel>(sortBy: [SortDescriptor(\.playCount, order: .reverse)])
-        let models = try context.fetch(descriptor)
-        return Array(models.prefix(limit).map { $0.toDomain() })
+        return try context.fetch(descriptor).prefix(limit).map { $0.toDomain() }
     }
-    
+
+    // MARK: Stats
+
     public func totalTrackCount() async throws -> Int {
-        let descriptor = FetchDescriptor<TrackModel>()
-        return try context.fetchCount(descriptor)
+        try context.fetchCount(FetchDescriptor<TrackModel>())
     }
-    
+
     public func totalDuration() async throws -> TimeInterval {
-        let tracks = try await fetchTracks(predicate: nil)
-        return tracks.reduce(0) { $0 + $1.duration }
+        try context.fetch(FetchDescriptor<TrackModel>()).reduce(0) { $0 + $1.duration }
     }
-    
+
     public func totalSize() async throws -> Int64 {
-        let tracks = try await fetchTracks(predicate: nil)
-        return tracks.reduce(0) { $0 + $1.fileSize }
+        try context.fetch(FetchDescriptor<TrackModel>()).reduce(0) { $0 + $1.fileSize }
+    }
+
+    // MARK: Private
+
+    private func model(id: String) throws -> TrackModel? {
+        let trackID = id
+        var descriptor = FetchDescriptor<TrackModel>(predicate: #Predicate { $0.id == trackID })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+}
+
+// MARK: - Grouping
+
+/// Shared album/artist/genre aggregation so the in-memory store and the
+/// persistent store cannot drift apart (they previously had separate copies).
+public enum AstryxGrouping {
+
+    public static func albums(from tracks: [AstryxTrack]) -> [AstryxAlbum] {
+        let grouped = Dictionary(grouping: tracks) { "\($0.album)\u{1F}\($0.albumArtist ?? $0.artist)" }
+        return grouped.map { key, tracks in
+            let parts = key.components(separatedBy: "\u{1F}")
+            let title = parts.first ?? "Unknown Album"
+            let artist = parts.count > 1 ? parts[1] : "Unknown Artist"
+            return AstryxAlbum(
+                id: stableID("album", title, artist),
+                title: title,
+                artist: artist,
+                albumArtist: tracks.first?.albumArtist,
+                year: tracks.first?.year,
+                genre: tracks.first?.genre,
+                trackCount: tracks.count,
+                duration: tracks.reduce(0) { $0 + $1.duration },
+                artworkURL: tracks.first?.artworkURL,
+                tracks: tracks.sorted {
+                    let left = ($0.discNumber ?? 0) * 1000 + ($0.trackNumber ?? 0)
+                    let right = ($1.discNumber ?? 0) * 1000 + ($1.trackNumber ?? 0)
+                    return left < right
+                },
+                dateAdded: tracks.map(\.dateAdded).min() ?? Date()
+            )
+        }
+        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    public static func artists(from tracks: [AstryxTrack]) -> [AstryxArtist] {
+        Dictionary(grouping: tracks) { $0.artist }
+            .map { name, tracks in
+                AstryxArtist(
+                    id: stableID("artist", name),
+                    name: name,
+                    albumCount: Set(tracks.map(\.album)).count,
+                    trackCount: tracks.count,
+                    artworkURL: tracks.first?.artworkURL,
+                    dateAdded: tracks.map(\.dateAdded).min() ?? Date()
+                )
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    public static func genres(from tracks: [AstryxTrack]) -> [AstryxGenre] {
+        Dictionary(grouping: tracks) { $0.genre ?? "Unknown" }
+            .map { name, tracks in
+                AstryxGenre(
+                    id: stableID("genre", name),
+                    name: name,
+                    trackCount: tracks.count,
+                    albumCount: Set(tracks.map(\.album)).count
+                )
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Deterministic identifier so album/artist rows keep a stable identity
+    /// across launches. The previous implementation derived identity from a
+    /// fresh `UUID()`, which broke navigation and diffing on every reload.
+    static func stableID(_ kind: String, _ parts: String...) -> String {
+        let joined = parts.joined(separator: "\u{1F}")
+        var hash = UInt64(0xcbf2_9ce4_8422_2325)
+        for byte in "\(kind)\u{1F}\(joined)".utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        return "\(kind)-\(String(hash, radix: 16))"
     }
 }
 
 #else
 
-// Fallback for Linux — uses InMemory
-public typealias SwiftDataAdapter = InMemorySwiftDataStack
+// SwiftData is unavailable (Linux / non-Apple). There is intentionally no
+// in-memory aliasing here: `AppDependencies` refuses to construct a persistent
+// library on such a platform. See BUG-01 in Docs/BUG_REGISTER.md.
 
 #endif

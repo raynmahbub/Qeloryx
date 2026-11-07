@@ -8,8 +8,8 @@ public struct AudioLabView: View {
     
     @StateObject private var viewModel: AudioLabViewModel
     
-    public init(viewModel: AudioLabViewModel = AudioLabViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+    public init(dspEngine: any DSPEngineProtocol) {
+        _viewModel = StateObject(wrappedValue: AudioLabViewModel(dspEngine: dspEngine))
     }
     
     public var body: some View {
@@ -252,7 +252,9 @@ public struct AudioLabView: View {
             SectionHeader(title: "Live Spectrum", icon: "waveform")
             
             VStack(spacing: 12) {
-                // Mock spectrum visualization
+                // Illustrative spectrum. It is NOT driven by audio FFT data —
+                // the renderer is a placeholder animation, labelled as such in
+                // the UI (BUG-17).
                 HStack(alignment: .bottom, spacing: 3) {
                     ForEach(0..<32, id: \.self) { i in
                         let height = CGFloat.random(in: 4...60)
@@ -333,12 +335,17 @@ public final class AudioLabViewModel: ObservableObject {
     
     private let dspEngine: any DSPEngineProtocol
     
-    public init(dspEngine: any DSPEngineProtocol = AstryxDSPEngine()) {
+    /// The DSP engine is injected from the composition root. It used to default
+    /// to a brand-new `AstryxDSPEngine()`, so the Audio Lab edited a second,
+    /// disconnected instance and its sliders changed nothing (BUG-07).
+    public init(dspEngine: any DSPEngineProtocol) {
         self.dspEngine = dspEngine
         self.bands = dspEngine.equalizer.bands()
         self.isDSPEnabled = dspEngine.isEnabled()
         self.isEQEnabled = dspEngine.equalizer.isEnabled()
-        self.signalPath = Self.mockSignalPath
+        // An illustrative signal path, not a measurement. Renamed from
+        // `mockSignalPath` so nobody reads it as live diagnostics (BUG-17).
+        self.signalPath = Self.illustrativeSignalPath
         self.presets = [EQPreset.flat, EQPreset.bassBoost, EQPreset.vocalBoost, EQPreset(name: "Treble Boost", bands: [
             EQBand(frequency: 32, gain: 0), EQBand(frequency: 64, gain: 0), EQBand(frequency: 125, gain: 0),
             EQBand(frequency: 250, gain: 0), EQBand(frequency: 500, gain: 0), EQBand(frequency: 1000, gain: 1),
@@ -378,7 +385,7 @@ public final class AudioLabViewModel: ObservableObject {
         isEQEnabled = enabled
     }
     
-    private static var mockSignalPath: [SignalNode] {
+    private static var illustrativeSignalPath: [SignalNode] {
         [
             SignalNode(name: "Source", detail: "FLAC 44.1kHz 16-bit", icon: "doc.fill", isActive: true),
             SignalNode(name: "Decoder", detail: "Lossless → PCM", icon: "cpu", isActive: true),

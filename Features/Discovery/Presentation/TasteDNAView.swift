@@ -8,8 +8,10 @@ public struct TasteDNAView: View {
     
     @StateObject private var viewModel: TasteDNAViewModel
     
-    public init(viewModel: TasteDNAViewModel = TasteDNAViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+    public init(tasteEngine: any TasteDNAEngineProtocol, libraryEngine: any LibraryEngineProtocol) {
+        _viewModel = StateObject(
+            wrappedValue: TasteDNAViewModel(tasteEngine: tasteEngine, libraryEngine: libraryEngine)
+        )
     }
     
     public var body: some View {
@@ -401,8 +403,8 @@ public final class TasteDNAViewModel: ObservableObject {
     private let libraryEngine: any LibraryEngineProtocol
     
     public init(
-        tasteEngine: any TasteDNAEngineProtocol = AstryxTasteDNAEngine(),
-        libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine()
+        tasteEngine: any TasteDNAEngineProtocol,
+        libraryEngine: any LibraryEngineProtocol
     ) {
         self.tasteEngine = tasteEngine
         self.libraryEngine = libraryEngine
@@ -415,9 +417,11 @@ public final class TasteDNAViewModel: ObservableObject {
         let tracks = (try? await libraryEngine.fetchAllTracks()) ?? []
         
         if tracks.isEmpty {
-            // Generate mock profile for preview if no tracks
-            profile = mockProfile
-            recommendations = mockRecommendations
+            // No tracks ⇒ no profile. The previous code substituted a
+            // fabricated "Indie / Rock / Lo-Fi" profile with invented play
+            // counts, so an empty library looked like a rich one (BUG-17).
+            profile = nil
+            recommendations = []
             isLoading = false
             return
         }
@@ -435,40 +439,7 @@ public final class TasteDNAViewModel: ObservableObject {
         await load()
     }
     
-    private var mockProfile: AstryxTasteProfile {
-        AstryxTasteProfile(
-            topGenres: [
-                TasteGenre(name: "Indie", playCount: 120, percentage: 0.35, color: "#10B981"),
-                TasteGenre(name: "Rock", playCount: 80, percentage: 0.25, color: "#EF4444"),
-                TasteGenre(name: "Lo-Fi", playCount: 60, percentage: 0.20, color: "#6B7280"),
-                TasteGenre(name: "Jazz", playCount: 40, percentage: 0.12, color: "#8B5CF6"),
-                TasteGenre(name: "Electronic", playCount: 30, percentage: 0.08, color: "#06B6D4")
-            ],
-            topArtists: [
-                TasteArtist(name: "Tame Impala", playCount: 45, trackCount: 12, percentage: 0.3),
-                TasteArtist(name: "Khruangbin", playCount: 38, trackCount: 8, percentage: 0.25),
-                TasteArtist(name: "Mac Miller", playCount: 32, trackCount: 15, percentage: 0.2),
-                TasteArtist(name: "FKJ", playCount: 28, trackCount: 6, percentage: 0.15),
-                TasteArtist(name: "Tom Misch", playCount: 20, trackCount: 10, percentage: 0.1)
-            ],
-            mood: TasteMood(primary: "Chill", secondary: "Introspective", energy: 0.35, valence: 0.55),
-            topEras: [
-                TasteEra(decade: "2020s", count: 120, percentage: 0.5),
-                TasteEra(decade: "2010s", count: 80, percentage: 0.3),
-                TasteEra(decade: "2000s", count: 40, percentage: 0.2)
-            ],
-            totalPlays: 342,
-            totalTracks: 240,
-            totalDuration: 86400,
-            favoriteCount: 42,
-            listeningTime: 123456,
-            diversityScore: 0.72
-        )
-    }
     
-    private var mockRecommendations: [AstryxRecommendation] {
-        [] // Empty for mock, real would be generated
-    }
 }
 
 // MARK: - Helpers

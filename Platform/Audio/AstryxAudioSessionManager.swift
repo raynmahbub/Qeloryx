@@ -55,12 +55,8 @@ public final class AstryxAudioSessionManager: AudioSessionManagerProtocol, @unch
     }
     
     public func handleInterruption(_ interruption: AudioSessionInterruption) {
-        switch interruption {
-        case .began:
-            eventBus.publish(.audioSessionInterrupted(reason: "began"))
-        case .ended(let shouldResume):
-            eventBus.publish(.audioSessionInterrupted(reason: "ended_shouldResume_\(shouldResume)"))
-        }
+        // Typed payload — no string matching on the consumer side (BUG-05).
+        eventBus.publish(.audioSessionInterrupted(interruption: interruption))
     }
     
     private func observeInterruptions() {
@@ -97,7 +93,9 @@ public final class AstryxAudioSessionManager: AudioSessionManagerProtocol, @unch
                   let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
             switch reason {
             case .oldDeviceUnavailable:
-                self?.eventBus.publish(.audioSessionInterrupted(reason: "route_oldDeviceUnavailable"))
+                // Headphones unplugged / Bluetooth disconnected: pause rather
+                // than continue on the built-in speaker.
+                self?.handleInterruption(.oldDeviceUnavailable)
             default:
                 break
             }

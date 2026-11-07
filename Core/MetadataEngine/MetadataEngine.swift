@@ -18,8 +18,24 @@ public struct RawMetadata: Sendable {
     public var lyrics: String?
     public var bitRate: Int?
     public var sampleRate: Int?
-    
-    public init(title: String? = nil, artist: String? = nil, album: String? = nil, albumArtist: String? = nil, genre: String? = nil, year: Int? = nil, trackNumber: Int? = nil, discNumber: Int? = nil, duration: TimeInterval? = nil, artworkData: Data? = nil, lyrics: String? = nil, bitRate: Int? = nil, sampleRate: Int? = nil) {
+    public var bitDepth: Int?
+
+    public init(
+        title: String? = nil,
+        artist: String? = nil,
+        album: String? = nil,
+        albumArtist: String? = nil,
+        genre: String? = nil,
+        year: Int? = nil,
+        trackNumber: Int? = nil,
+        discNumber: Int? = nil,
+        duration: TimeInterval? = nil,
+        artworkData: Data? = nil,
+        lyrics: String? = nil,
+        bitRate: Int? = nil,
+        sampleRate: Int? = nil,
+        bitDepth: Int? = nil
+    ) {
         self.title = title
         self.artist = artist
         self.album = album
@@ -33,6 +49,7 @@ public struct RawMetadata: Sendable {
         self.lyrics = lyrics
         self.bitRate = bitRate
         self.sampleRate = sampleRate
+        self.bitDepth = bitDepth
     }
 }
 
@@ -57,37 +74,17 @@ public final class AstryxMetadataEngine: MetadataEngineProtocol {
         return format != .unknown
     }
     
+    /// Filename-only fallback.
+    ///
+    /// The real AVAsset extraction lives in
+    /// `Platform/Audio/MetadataExtractor.swift` (`AstryxMetadataExtractor`) and
+    /// must be injected by the composition root. This Core type deliberately
+    /// does **not** pretend to read tags: the previous implementation returned
+    /// `nil` from a stub and silently fell back to guessing from filenames,
+    /// which is why imported tracks had no artist, artwork or duration (BUG-25).
     public func extractMetadata(from url: URL) async throws -> RawMetadata {
-        // Try AVAsset extraction if available (Platform layer would have real AVFoundation)
-        // For Core-only build, use file name parsing + fallback
-        // Real implementation in Platform/Persistence uses AVAsset
-        
-        #if canImport(AVFoundation)
-        // If AVFoundation available, try to extract (even in Core, we can try)
-        if let avMetadata = await extractViaAVAsset(url: url) {
-            return avMetadata
-        }
-        #endif
-        
-        // Fallback: file name parsing
         return extractViaFileName(url: url)
     }
-    
-    #if canImport(AVFoundation)
-    private func extractViaAVAsset(url: URL) async -> RawMetadata? {
-        // This is a simplified version — real implementation would be in Platform layer
-        // But we include here for QEL-024 to show production intent
-        // In actual iOS app, Platform/Audio/AVFoundationAdapter would handle this
-        
-        // For Linux sandbox, AVFoundation not available, so this won't be called
-        // For iOS, we attempt to read common metadata
-        
-        // Note: Using AVAsset requires async loading in iOS 15+
-        // For QEL-024 we provide structure, actual extraction in Platform/MetadataExtractor
-        
-        return nil // Placeholder — real extraction in Platform/MetadataExtractor.swift
-    }
-    #endif
     
     private func extractViaFileName(url: URL) -> RawMetadata {
         let fileName = url.deletingPathExtension().lastPathComponent

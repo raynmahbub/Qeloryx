@@ -62,7 +62,7 @@ public final class DownloadsViewModel: ObservableObject {
     private var eventSubscriptions: [Any] = []
     
     public init(
-        downloadEngine: any DownloadEngineProtocol = AstryxDownloadEngine(),
+        downloadEngine: any DownloadEngineProtocol,
         eventBus: any EventBusProtocol = AstryxEventBus.shared
     ) {
         self.downloadEngine = downloadEngine

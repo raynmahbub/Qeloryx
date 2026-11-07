@@ -7,6 +7,11 @@ import Foundation
 // MARK: - SwiftDataStack Protocol (Portable) — QEL-024 Enhanced
 
 public protocol SwiftDataStackProtocol: Sendable {
+    /// `false` for the in-memory store. The UI shows a persistent banner when
+    /// the library will not survive relaunch, instead of silently appearing to
+    /// save (BUG-01).
+    var isPersistent: Bool { get }
+
     // Tracks
     func fetchTracks(predicate: TrackPredicate?) async throws -> [AstryxTrack]
     func fetchTrack(id: String) async throws -> AstryxTrack?
@@ -47,6 +52,9 @@ public protocol SwiftDataStackProtocol: Sendable {
     
     // Playlists
     func fetchPlaylists() async throws -> [AstryxPlaylist]
+    func insertPlaylist(_ playlist: AstryxPlaylist) async throws
+    func updatePlaylist(_ playlist: AstryxPlaylist) async throws
+    func deletePlaylist(id: String) async throws
     
     // Special queries
     func fetchRecentlyAdded(limit: Int) async throws -> [AstryxTrack]
@@ -70,7 +78,16 @@ public struct TrackPredicate: Sendable {
     public var libraryID: String?
     public var isLossless: Bool?
     
-    public init(searchText: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, isFavorite: Bool? = nil, folderPath: String? = nil, libraryID: String? = nil, isLossless: Bool? = nil) {
+    public init(
+        searchText: String? = nil,
+        artist: String? = nil,
+        album: String? = nil,
+        genre: String? = nil,
+        isFavorite: Bool? = nil,
+        folderPath: String? = nil,
+        libraryID: String? = nil,
+        isLossless: Bool? = nil
+    ) {
         self.searchText = searchText
         self.artist = artist
         self.album = album
@@ -85,8 +102,12 @@ public struct TrackPredicate: Sendable {
 // MARK: - In-Memory Implementation — QEL-024 Production
 
 public final class InMemorySwiftDataStack: SwiftDataStackProtocol, @unchecked Sendable {
+    /// Never survives relaunch — by definition.
+    public let isPersistent = false
+
     private var tracks: [String: AstryxTrack] = [:]
     private var libraries: [String: AstryxLibrary] = [:]
+    private var playlists: [String: AstryxPlaylist] = [:]
     private let lock = NSLock()
     
     public init() {}
@@ -111,7 +132,9 @@ public final class InMemorySwiftDataStack: SwiftDataStackProtocol, @unchecked Se
             if let genre = p.genre { result = result.filter { $0.genre == genre } }
             if let fav = p.isFavorite { result = result.filter { $0.isFavorite == fav } }
             if let folder = p.folderPath { result = result.filter { $0.folderPath == folder } }
-            if let libID = p.libraryID { result = result.filter { $0.folderPath?.contains(libID) == true || true } } // Simplified for in-memory
+            // Previously `|| true`, which made every per-library query return
+            // the whole library. Track now carries its owning library ID.
+            if let libID = p.libraryID { result = result.filter { $0.libraryID == libID } }
             if let lossless = p.isLossless { result = result.filter { $0.isLossless == lossless } }
         }
         
@@ -151,11 +174,9 @@ public final class InMemorySwiftDataStack: SwiftDataStackProtocol, @unchecked Se
     }
     
     public func fetchTracks(forLibrary libraryID: String) async throws -> [AstryxTrack] {
-        // For in-memory, we don't have libraryID in track, so return all for now
-        // Real SwiftData implementation would have libraryID field
         lock.lock()
         defer { lock.unlock() }
-        return Array(tracks.values)
+        return tracks.values.filter { $0.libraryID == libraryID }
     }
     
     public func insertTrack(_ track: AstryxTrack) async throws {
@@ -182,8 +203,9 @@ public final class InMemorySwiftDataStack: SwiftDataStackProtocol, @unchecked Se
     
     public func deleteTracks(forLibrary libraryID: String) async throws {
         lock.lock()
-        // Simplified: delete all for in-memory
-        tracks.removeAll()
+        // Only remove entries that belong to this library — the previous
+        // implementation wiped the entire store.
+        tracks = tracks.filter { $0.value.libraryID != libraryID }
         lock.unlock()
     }
     
@@ -295,7 +317,29 @@ public final class InMemorySwiftDataStack: SwiftDataStackProtocol, @unchecked Se
     
     // MARK: Playlists
     
-    public func fetchPlaylists() async throws -> [AstryxPlaylist] { [] }
+    public func fetchPlaylists() async throws -> [AstryxPlaylist] {
+        lock.lock()
+        defer { lock.unlock() }
+        return playlists.values.sorted { $0.dateModified > $1.dateModified }
+    }
+
+    public func insertPlaylist(_ playlist: AstryxPlaylist) async throws {
+        lock.lock()
+        playlists[playlist.id] = playlist
+        lock.unlock()
+    }
+
+    public func updatePlaylist(_ playlist: AstryxPlaylist) async throws {
+        lock.lock()
+        playlists[playlist.id] = playlist
+        lock.unlock()
+    }
+
+    public func deletePlaylist(id: String) async throws {
+        lock.lock()
+        playlists.removeValue(forKey: id)
+        lock.unlock()
+    }
     
     // MARK: Special Queries
     
@@ -339,16 +383,12 @@ public final class InMemorySwiftDataStack: SwiftDataStackProtocol, @unchecked Se
     }
 }
 
-// MARK: - Production SwiftData Implementation (iOS 17+)
-// Note: Real implementation would use @Model, ModelContainer, ModelContext
-// For QEL-024 we provide the structure, but keep InMemory as default for Linux sandbox
-// Actual SwiftData models would be in Platform/Persistence/SwiftDataAdapter.swift
-
-#if canImport(SwiftData)
-import SwiftData
-
-// Placeholder for future SwiftData @Model definitions
-// These would be real @Model classes with relationships in production iOS build
-// For now, InMemorySwiftDataStack is used even on iOS for foundation, but structure is ready for migration
-
-#endif
+// MARK: - Production implementation
+//
+// This type is the *test/preview* store only. The persistent store lives in
+// `Platform/Persistence/SwiftDataAdapter.swift` and is injected by the
+// composition root (see `App/Composition/AppDependencies.swift`).
+//
+// There is deliberately no `SwiftData` fallback here: a platform that cannot
+// persist must fail loudly in the composition root rather than quietly run on
+// an in-memory store and lose the user's library on relaunch (BUG-01).

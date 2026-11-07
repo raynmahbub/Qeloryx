@@ -12,12 +12,17 @@ public enum AstryxPlaybackState: Sendable, Equatable {
     case paused(trackID: String, position: TimeInterval, duration: TimeInterval)
     case stopped
     case failed(trackID: String?, error: String)
-    
+
     public var isPlaying: Bool {
         if case .playing = self { return true }
         return false
     }
-    
+
+    public var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+
     public var currentTrackID: String? {
         switch self {
         case .loading(let id): return id
@@ -27,7 +32,7 @@ public enum AstryxPlaybackState: Sendable, Equatable {
         default: return nil
         }
     }
-    
+
     public var position: TimeInterval {
         switch self {
         case .playing(_, let pos, _): return pos
@@ -35,7 +40,7 @@ public enum AstryxPlaybackState: Sendable, Equatable {
         default: return 0
         }
     }
-    
+
     public var duration: TimeInterval {
         switch self {
         case .playing(_, _, let dur): return dur
@@ -51,7 +56,7 @@ public enum AstryxRepeatMode: String, Sendable, CaseIterable, Equatable {
     case off
     case all
     case one
-    
+
     public var next: AstryxRepeatMode {
         switch self {
         case .off: return .all
@@ -59,7 +64,7 @@ public enum AstryxRepeatMode: String, Sendable, CaseIterable, Equatable {
         case .one: return .off
         }
     }
-    
+
     public var systemImage: String {
         switch self {
         case .off: return "repeat"
@@ -74,9 +79,41 @@ public enum AstryxRepeatMode: String, Sendable, CaseIterable, Equatable {
 public enum AstryxShuffleMode: Sendable, Equatable {
     case off
     case on(seed: Int? = nil)
-    
+
     public var isEnabled: Bool {
         if case .on = self { return true }
         return false
+    }
+}
+
+// MARK: - Playback errors
+
+/// Typed failures for the playback path. The engine never silently degrades
+/// into "simulated playback"; it reports one of these instead.
+public enum PlaybackError: Error, LocalizedError, Equatable {
+    /// No resolver was configured and no library engine was supplied.
+    case noPlaybackSource
+    /// The track ID could not be resolved to a file.
+    case trackNotResolved(trackID: String)
+    /// The audio adapter rejected the file (missing, corrupt, unsupported).
+    case loadFailed(trackID: String, reason: String)
+    /// Nothing is loaded, so there is nothing to resume.
+    case nothingToResume
+    /// A remote command did not complete within its deadline.
+    case commandTimedOut
+
+    public var errorDescription: String? {
+        switch self {
+        case .noPlaybackSource:
+            return "No playback source is configured."
+        case .trackNotResolved(let trackID):
+            return "Track could not be resolved: \(trackID)"
+        case .loadFailed(_, let reason):
+            return "Audio file could not be loaded: \(reason)"
+        case .nothingToResume:
+            return "Nothing is loaded to resume."
+        case .commandTimedOut:
+            return "The playback command timed out."
+        }
     }
 }

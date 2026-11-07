@@ -61,8 +61,8 @@ public final class LibraryViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     
     public init(
-        libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine(),
-        audioEngine: any AstryxAudioEngineProtocol = AstryxAudioEngine(),
+        libraryEngine: any LibraryEngineProtocol,
+        audioEngine: any AstryxAudioEngineProtocol,
         eventBus: any EventBusProtocol = AstryxEventBus.shared
     ) {
         self.libraryEngine = libraryEngine
@@ -133,7 +133,18 @@ public final class LibraryViewModel: ObservableObject {
             async let mostPlayedTask = libraryEngine.fetchMostPlayed(limit: 20)
             async let statsTask = libraryEngine.stats()
             
-            let (t, al, ar, g, lib, fav, rec, hist, most, st) = try await (tracksTask, albumsTask, artistsTask, genresTask, librariesTask, favoritesTask, recentTask, historyTask, mostPlayedTask, statsTask)
+            let (t, al, ar, g, lib, fav, rec, hist, most, st) = try await (
+                tracksTask,
+                albumsTask,
+                artistsTask,
+                genresTask,
+                librariesTask,
+                favoritesTask,
+                recentTask,
+                historyTask,
+                mostPlayedTask,
+                statsTask
+            )
             
             self.tracks = t
             self.albums = al

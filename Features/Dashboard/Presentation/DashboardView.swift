@@ -8,8 +8,20 @@ public struct DashboardView: View {
     
     @StateObject private var viewModel: DashboardViewModel
     
-    public init(viewModel: DashboardViewModel = DashboardViewModel()) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+    public init(
+        libraryEngine: any LibraryEngineProtocol,
+        downloadEngine: any DownloadEngineProtocol,
+        tasteEngine: any TasteDNAEngineProtocol,
+        audioEngine: any AstryxAudioEngineProtocol
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: DashboardViewModel(
+                libraryEngine: libraryEngine,
+                downloadEngine: downloadEngine,
+                tasteEngine: tasteEngine,
+                audioEngine: audioEngine
+            )
+        )
     }
     
     public var body: some View {
@@ -63,7 +75,7 @@ public struct DashboardView: View {
     }
     
     private var tasteDNAWidget: some View {
-        NavigationLink(destination: TasteDNAView()) {
+        NavigationLink(destination: TasteDNAView(tasteEngine: tasteEngine, libraryEngine: libraryEngine)) {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
@@ -101,12 +113,50 @@ public struct DashboardView: View {
     
     private var statsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            DashboardCard(title: "Favorites", value: "\(viewModel.favoriteCount)", icon: "heart.fill", color: AstryxColors.sunset, destination: AnyView(LibraryView()))
-            DashboardCard(title: "Recent", value: "\(viewModel.recentCount)", icon: "clock.fill", color: AstryxColors.auroraBlue, destination: AnyView(LibraryView()))
-            DashboardCard(title: "Downloads", value: "\(viewModel.downloadCount)", icon: "arrow.down.circle.fill", color: AstryxColors.emerald, destination: AnyView(DownloadsView()))
-            DashboardCard(title: "Mood", value: viewModel.currentMood, icon: "face.smiling.fill", color: AstryxColors.auroraBlue, destination: AnyView(TasteDNAView()))
-            DashboardCard(title: "Queue", value: "\(viewModel.queueCount)", icon: "music.note.list", color: AstryxColors.Semantic.foregroundSecondary, destination: AnyView(AstryxPlayerView()))
-            DashboardCard(title: "Vinyl", value: "Collection", icon: "opticaldisc.fill", color: AstryxColors.Semantic.foregroundTertiary, destination: AnyView(LibraryView()))
+            DashboardCard(
+                title: "Favorites",
+                value: "\(viewModel.favoriteCount)",
+                icon: "heart.fill",
+                color: AstryxColors.sunset,
+                destination: AnyView(LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine))
+            )
+            DashboardCard(
+                title: "Recent",
+                value: "\(viewModel.recentCount)",
+                icon: "clock.fill",
+                color: AstryxColors.auroraBlue,
+                destination: AnyView(LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine))
+            )
+            DashboardCard(
+                title: "Downloads",
+                value: "\(viewModel.downloadCount)",
+                icon: "arrow.down.circle.fill",
+                color: AstryxColors.emerald,
+                destination: AnyView(DownloadsView(downloadEngine: downloadEngine))
+            )
+            DashboardCard(
+                title: "Mood",
+                value: viewModel.currentMood,
+                icon: "face.smiling.fill",
+                color: AstryxColors.auroraBlue,
+                destination: AnyView(
+                    TasteDNAView(tasteEngine: tasteEngine, libraryEngine: libraryEngine)
+                )
+            )
+            DashboardCard(
+                title: "Queue",
+                value: "\(viewModel.queueCount)",
+                icon: "music.note.list",
+                color: AstryxColors.Semantic.foregroundSecondary,
+                destination: AnyView(AstryxPlayerView())
+            )
+            DashboardCard(
+                title: "Vinyl",
+                value: "Collection",
+                icon: "opticaldisc.fill",
+                color: AstryxColors.Semantic.foregroundTertiary,
+                destination: AnyView(LibraryView(libraryEngine: libraryEngine, audioEngine: audioEngine))
+            )
         }
     }
     
@@ -200,15 +250,18 @@ public final class DashboardViewModel: ObservableObject {
     private let libraryEngine: any LibraryEngineProtocol
     private let downloadEngine: any DownloadEngineProtocol
     private let tasteEngine: any TasteDNAEngineProtocol
+    private let audioEngine: any AstryxAudioEngineProtocol
     
     public init(
-        libraryEngine: any LibraryEngineProtocol = AstryxLibraryEngine(),
-        downloadEngine: any DownloadEngineProtocol = AstryxDownloadEngine(useRealSession: false),
-        tasteEngine: any TasteDNAEngineProtocol = AstryxTasteDNAEngine()
+        libraryEngine: any LibraryEngineProtocol,
+        downloadEngine: any DownloadEngineProtocol,
+        tasteEngine: any TasteDNAEngineProtocol,
+        audioEngine: any AstryxAudioEngineProtocol
     ) {
         self.libraryEngine = libraryEngine
         self.downloadEngine = downloadEngine
         self.tasteEngine = tasteEngine
+        self.audioEngine = audioEngine
         
         // Greeting based on time
         let hour = Calendar.current.component(.hour, from: Date())
@@ -230,7 +283,9 @@ public final class DashboardViewModel: ObservableObject {
         favoriteCount = favorites.count
         recentCount = history.count
         downloadCount = downloads.filter { $0.state == .completed }.count
-        queueCount = 0 // Would come from queue engine
+        // `currentQueue` is a synchronous, view-facing snapshot; only this
+        // read is taken on the main actor after the awaits above.
+        queueCount = audioEngine.currentQueue.count
         
         if let profile = profile {
             currentMood = profile.mood.primary
@@ -238,15 +293,10 @@ public final class DashboardViewModel: ObservableObject {
         }
         
         recentTracks = history
-        
-        // Mock data if empty
-        if favorites.isEmpty && history.isEmpty {
-            favoriteCount = 42
-            recentCount = 12
-            downloadCount = 8
-            queueCount = 5
-            recentTracks = [] // Keep empty for now
-        }
+
+        // An empty library shows zeros and an empty state. It used to report
+        // 42 favourites, 12 recent and 8 downloads out of thin air, which made
+        // a broken import look like a working library (BUG-17).
     }
     
     public func refresh() async {
