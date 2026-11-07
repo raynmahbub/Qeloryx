@@ -4,7 +4,7 @@
 
 import Foundation
 
-public enum AstryxDownloadState: String, Sendable, Equatable, CaseIterable {
+public enum AstryxDownloadState: String, Sendable, Equatable, CaseIterable, Codable {
     case queued = "Queued"
     case downloading = "Downloading"
     case paused = "Paused"

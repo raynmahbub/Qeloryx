@@ -342,7 +342,12 @@ public actor SwiftDataAdapter: SwiftDataStackProtocol {
     private let persistent: Bool
 
     /// An in-memory adapter is not persistent; the app always uses disk.
-    public var isPersistent: Bool { persistent }
+    ///
+    /// `nonisolated` because `SwiftDataStackProtocol` declares the getter as a
+    /// plain, non-async requirement, which an actor can only satisfy by
+    /// reading state that needs no isolation hop. `persistent` is an immutable
+    /// `let` assigned in `init`, so that read is safe from any thread.
+    public nonisolated var isPersistent: Bool { persistent }
 
     /// - Parameter inMemory: tests pass `true`; the app always uses `false`.
     public init(inMemory: Bool = false) throws {
