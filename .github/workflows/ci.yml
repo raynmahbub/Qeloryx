@@ -27,9 +27,55 @@ jobs:
       - name: Show toolchain
         run: swift --version
       - name: Build
+        id: build
         run: |
           set -o pipefail
-          swift build -v 2>&1 | tee swift-build.log
+          swift build 2>&1 | tee swift-build.log
+      - name: Surface compiler errors in check annotations
+        # The iOS job already does this; without it a Swift package build
+        # failure shows up only as "exit code 1" with no diagnostic, and the
+        # log artifact cannot be fetched when blob storage is unreachable.
+        # `swift build` (not -v) plus unambiguous per-module retries pin the
+        # failing module and print the first real compiler error as ::error.
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, sys
+
+          log = Path("swift-build.log")
+          lines = log.read_text(errors="replace").splitlines() if log.exists() else []
+
+          diagnostic = re.compile(r"^/\S+\.swift:\d+:\d+: (?:error|fatal error):")
+          grabbed = re.compile(r"^(?:ld|clang|swiftc|error): ")
+
+          found = [l for l in lines if diagnostic.match(l) or grabbed.match(l)]
+          for line in found[:25]:
+              escaped = line.replace("%", "%25")
+              print(f"::error title=Swift package build diagnostic::{escaped}")
+
+          if found:
+              raise SystemExit(0)
+
+          # No parseable diagnostic: rebuild each library on its own so the
+          # annotation names the module that actually fails.
+          for target in ("QeloryxCore", "QeloryxDesignSystem", "QeloryxPlatform"):
+              result = subprocess.run(
+                  ["swift", "build", "--target", target],
+                  capture_output=True, text=True
+              )
+              if result.returncode != 0:
+                  print(f"::error title=Swift package build failed::"
+                        f"`swift build --target {target}` failed with "
+                        f"exit code {result.returncode}; see swift-build.log.")
+                  tail = (result.stderr or result.stdout).strip().splitlines()[-12:]
+                  for line in tail:
+                      print(f"::error title={target}::{line[:300]}".replace("%", "%25"))
+                  raise SystemExit(0)
+
+          print("::error title=Swift package build failed::"
+                "No compiler diagnostic was captured; inspect swift-build.log.")
+          PY
       # Test classes run one step each with their own step-level timeouts —
       # the whole suite in a single `swift test` invocation has wedged more
       # than once without naming the hanging test (piped XCTest output is
@@ -333,31 +379,59 @@ jobs:
       - name: Verify brand assets are consistent
         run: |
           set -euo pipefail
-          # Every file named in an asset catalog Contents.json must exist, and
-          # the app icon must be a raw alpha-free square or App Store Connect
-          # rejects the upload.
+          # Every file named in an asset catalog Contents.json must exist, the
+          # 1024 marketing icon must be present, and PNGs must be true PNGs.
+          #
+          # Deliberately dependency-free. The first version of this check used
+          # Pillow to validate size and alpha, which is not installed on
+          # ubuntu-latest, so the step failed with ModuleNotFoundError rather
+          # than a real finding. PNG dimensions and colour type are read from
+          # the IHDR chunk directly — no packages required.
           python3 - <<'PYEOF'
-          import json, pathlib, sys
-          from PIL import Image
+          import json, pathlib, struct, sys
 
           root = pathlib.Path("App/Resources/Assets.xcassets")
           failures = []
+
           for contents in sorted(root.rglob("Contents.json")):
               data = json.loads(contents.read_text())
               for image in data.get("images", []):
-                  filename = image.get("filename")
-                  if filename and not (contents.parent / filename).exists():
-                      failures.append(f"missing {contents.parent / filename}")
+                  name = image.get("filename")
+                  if name and not (contents.parent / name).exists():
+                      failures.append(f"missing {contents.parent / name}")
+
+          def png_header(path):
+              with open(path, "rb") as fh:
+                  head = fh.read(33)
+              if head[:8] != b"\x89PNG\r\n\x1a\n":
+                  return None
+              width, height = struct.unpack(">II", head[16:24])
+              bit_depth, colour_type = head[24], head[25]
+              return width, height, bit_depth, colour_type
 
           marketing = root / "AppIcon.appiconset/AppIcon-ios-marketing-1024@1x.png"
           if not marketing.exists():
               failures.append("no 1024 marketing icon")
           else:
-              with Image.open(marketing) as img:
-                  if img.size != (1024, 1024):
-                      failures.append(f"marketing icon is {img.size}, want 1024x1024")
-                  if img.mode != "RGB":
-                      failures.append(f"marketing icon has alpha ({img.mode})")
+              header = png_header(marketing)
+              if header is None:
+                  failures.append("marketing icon is not a PNG")
+              else:
+                  width, height, depth, colour = header
+                  if (width, height) != (1024, 1024):
+                      failures.append(f"marketing icon is {width}x{height}, want 1024x1024")
+                  # colour type 2 = truecolour (no alpha), 6 = truecolour+alpha
+                  if colour != 2:
+                      failures.append(
+                          f"marketing icon has an alpha channel (PNG colour type {colour}); "
+                          "App Store Connect rejects transparent icons"
+                      )
+                  if depth != 8:
+                      failures.append(f"marketing icon is {depth}-bit, want 8-bit")
+
+          for png in sorted((root / "AppIcon.appiconset").glob("*.png")):
+              if png_header(png) is None:
+                  failures.append(f"{png.name} is not a valid PNG")
 
           if failures:
               print("\n".join(failures))

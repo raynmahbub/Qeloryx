@@ -193,9 +193,9 @@ public final class AstryxAudioEngine: AstryxAudioEngineProtocol, @unchecked Send
         switch playbackState {
         case .paused(let id, _, _):
             try await resumePlayback(trackID: id)
-        case .failed(let id, _) where id != nil:
+        case .failed(let id?, _):
             // Retrying a failed track must re-load it, not pretend to resume.
-            try await startPlayback(trackID: id!)
+            try await startPlayback(trackID: id)
         default:
             guard !currentQueue.isEmpty else { throw PlaybackError.nothingToResume }
             let id = currentQueue.currentItem?.trackID ?? currentQueue.items[0].trackID

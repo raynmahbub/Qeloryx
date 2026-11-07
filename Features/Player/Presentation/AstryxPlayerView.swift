@@ -11,7 +11,10 @@ public struct AstryxPlayerView: View {
     @State private var showAirPlay = false
     @Environment(\.dismiss) private var dismiss
     
-    public init(viewModel: AstryxPlayerViewModel = AstryxPlayerViewModel()) {
+    /// No default view model: `AstryxPlayerViewModel` requires an audio and a
+    /// library engine, and defaulting to a freshly built one was precisely the
+    /// "every view owns its own engine" bug this branch removed (BUG-19).
+    public init(viewModel: AstryxPlayerViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
     

@@ -5,15 +5,28 @@
 import SwiftUI
 
 public struct DashboardView: View {
-    
+
     @StateObject private var viewModel: DashboardViewModel
-    
+
+    // Stored, not just used to build the view model: the navigation
+    // destinations in `statsGrid` / `tasteDNAWidget` construct child views that
+    // need the same engines. Previously these existed only as `init` parameters,
+    // so every reference inside `body` was "cannot find in scope".
+    private let libraryEngine: any LibraryEngineProtocol
+    private let downloadEngine: any DownloadEngineProtocol
+    private let tasteEngine: any TasteDNAEngineProtocol
+    private let audioEngine: any AstryxAudioEngineProtocol
+
     public init(
         libraryEngine: any LibraryEngineProtocol,
         downloadEngine: any DownloadEngineProtocol,
         tasteEngine: any TasteDNAEngineProtocol,
         audioEngine: any AstryxAudioEngineProtocol
     ) {
+        self.libraryEngine = libraryEngine
+        self.downloadEngine = downloadEngine
+        self.tasteEngine = tasteEngine
+        self.audioEngine = audioEngine
         _viewModel = StateObject(
             wrappedValue: DashboardViewModel(
                 libraryEngine: libraryEngine,
@@ -148,7 +161,7 @@ public struct DashboardView: View {
                 value: "\(viewModel.queueCount)",
                 icon: "music.note.list",
                 color: AstryxColors.Semantic.foregroundSecondary,
-                destination: AnyView(AstryxPlayerView())
+                destination: nil
             )
             DashboardCard(
                 title: "Vinyl",
@@ -327,35 +340,52 @@ private struct DashboardCard: View {
     let value: String
     let icon: String
     let color: Color
-    let destination: AnyView
-    
+    /// Optional: a card with `nil` is a plain, non-navigating tile. The Queue
+    /// card has no destination because `AstryxPlayerView` needs a view model
+    /// carrying an engine pair, event bus and scrobbler that this screen does
+    /// not own — a dangling `AstryxPlayerView()` was the alternative.
+    let destination: AnyView?
+
     var body: some View {
-        NavigationLink(destination: destination) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(.system(size: 18))
-                        .foregroundColor(color)
-                    Spacer()
+        content
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let destination {
+            NavigationLink(destination: destination) { cardBody }
+        } else {
+            cardBody
+        }
+    }
+
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(color)
+                Spacer()
+                if destination != nil {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12))
                         .foregroundColor(AstryxColors.Semantic.foregroundTertiary)
                 }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(value)
-                        .font(AstryxTypography.Heading.h3)
-                        .foregroundColor(AstryxColors.iceWhite)
-                        .lineLimit(1)
-                    Text(title)
-                        .font(AstryxTypography.Body.small)
-                        .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
-                }
             }
-            .padding(14)
-            .background(AstryxColors.Semantic.backgroundSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(AstryxTypography.Heading.h3)
+                    .foregroundColor(AstryxColors.iceWhite)
+                    .lineLimit(1)
+                Text(title)
+                    .font(AstryxTypography.Body.small)
+                    .foregroundColor(AstryxColors.Semantic.foregroundSecondary)
+            }
         }
+        .padding(14)
+        .background(AstryxColors.Semantic.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
