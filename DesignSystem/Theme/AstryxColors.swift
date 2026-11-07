@@ -21,29 +21,29 @@ public struct AstryxColors {
     
     // MARK: - Midnight Variants
     public struct Midnight {
-        public static let _900 = Color(hex: "#050816") // Primary background
-        public static let _800 = Color(hex: "#0F172A")
-        public static let _700 = Color(hex: "#1E293B")
-        public static let _600 = Color(hex: "#334155")
-        public static let _500 = Color(hex: "#475569")
+        public static let tone900 = Color(hex: "#050816") // Primary background
+        public static let tone800 = Color(hex: "#0F172A")
+        public static let tone700 = Color(hex: "#1E293B")
+        public static let tone600 = Color(hex: "#334155")
+        public static let tone500 = Color(hex: "#475569")
     }
     
     // MARK: - Aurora Blue Variants
     public struct Aurora {
-        public static let _600 = Color(hex: "#2563EB")
-        public static let _500 = Color(hex: "#3B82F6") // Primary
-        public static let _400 = Color(hex: "#60A5FA")
-        public static let _300 = Color(hex: "#93C5FD")
-        public static let _200 = Color(hex: "#BFDBFE")
-        public static let _100 = Color(hex: "#DBEAFE")
+        public static let tone600 = Color(hex: "#2563EB")
+        public static let tone500 = Color(hex: "#3B82F6") // Primary
+        public static let tone400 = Color(hex: "#60A5FA")
+        public static let tone300 = Color(hex: "#93C5FD")
+        public static let tone200 = Color(hex: "#BFDBFE")
+        public static let tone100 = Color(hex: "#DBEAFE")
     }
     
     // MARK: - Semantic
     public struct Semantic {
-        public static let background = Midnight._900
-        public static let backgroundSecondary = Midnight._800
-        public static let surface = Midnight._700
-        public static let surfaceElevated = Midnight._600
+        public static let background = Midnight.tone900
+        public static let backgroundSecondary = Midnight.tone800
+        public static let surface = Midnight.tone700
+        public static let surfaceElevated = Midnight.tone600
         
         public static let foreground = Color(hex: "#F8FAFC")
         public static let foregroundSecondary = Color(hex: "#CBD5E1")
@@ -52,9 +52,9 @@ public struct AstryxColors {
         public static let border = Color(hex: "#1E293B")
         public static let borderStrong = Color(hex: "#334155")
         
-        public static let primary = Aurora._500
-        public static let primaryHover = Aurora._400
-        public static let primaryActive = Aurora._600
+        public static let primary = Aurora.tone500
+        public static let primaryHover = Aurora.tone400
+        public static let primaryActive = Aurora.tone600
         
         public static let success = Color(hex: "#10B981")
         public static let warning = Color(hex: "#F97316")
@@ -131,9 +131,9 @@ public extension AstryxColors {
             ("Emerald", emerald),
             ("Sunset", sunset),
             ("Ice White", iceWhite),
-            ("Midnight 800", Midnight._800),
-            ("Midnight 700", Midnight._700),
-            ("Aurora 400", Aurora._400)
+            ("Midnight 800", Midnight.tone800),
+            ("Midnight 700", Midnight.tone700),
+            ("Aurora 400", Aurora.tone400)
         ]
     }
 }

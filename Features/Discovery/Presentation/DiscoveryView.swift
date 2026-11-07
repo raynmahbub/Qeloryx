@@ -7,12 +7,22 @@ import SwiftUI
 public struct DiscoveryView: View {
     
     @StateObject private var viewModel: DiscoveryViewModel
-    
+
+    // The navigation links below hand these engines to child screens, so the
+    // view needs its own references. Passing them only to the view model left
+    // `body` unable to resolve them.
+    private let tasteEngine: any TasteDNAEngineProtocol
+    private let libraryEngine: any LibraryEngineProtocol
+    private let dspEngine: any DSPEngineProtocol
+
     public init(
         tasteEngine: any TasteDNAEngineProtocol,
         libraryEngine: any LibraryEngineProtocol,
         dspEngine: any DSPEngineProtocol
     ) {
+        self.tasteEngine = tasteEngine
+        self.libraryEngine = libraryEngine
+        self.dspEngine = dspEngine
         _viewModel = StateObject(
             wrappedValue: DiscoveryViewModel(
                 tasteEngine: tasteEngine,
