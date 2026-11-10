@@ -11,7 +11,7 @@ public enum AstryxListeningSource: String, Sendable, CaseIterable, Codable, Equa
     case search
     case playlist
     case radio
-    case import_ = "import"
+    case imported = "import"
 }
 
 /// One observed listening event. The Taste DNA engine consumes these to

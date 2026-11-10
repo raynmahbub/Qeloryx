@@ -26,7 +26,7 @@ final class CapabilityRegistryTests: XCTestCase {
         XCTAssertFalse(all.isEmpty)
         XCTAssertNotNil(registry.capability(for: CapabilityID.lyrics))
         XCTAssertNotNil(registry.capability(for: CapabilityID.eq))
-        XCTAssertNotNil(registry.capability(for: CapabilityID.social))
+        XCTAssertNotNil(registry.capability(for: CapabilityID.spaces))
     }
     
     func testIsEnabled() {

@@ -106,6 +106,6 @@ public final class TasteDNACapability: BaseCapability {
 
 public final class SpacesCapability: BaseCapability {
     public init() {
-        super.init(id: CapabilityID.social, name: "Astryx Spaces", description: "Shared queue, DJ handoff, live reactions")
+        super.init(id: CapabilityID.spaces, name: "Astryx Spaces", description: "Shared queue, DJ handoff, live reactions")
     }
 }

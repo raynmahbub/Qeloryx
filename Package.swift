@@ -30,14 +30,14 @@ let package = Package(
             name: "QeloryxCore",
             dependencies: [],
             path: "Qeloryx",
+            exclude: [
+                // SwiftUI environment glue — app target only, not portable core.
+                "Utilities/Extensions/EnvironmentValues+Qeloryx.swift"
+            ],
             sources: [
                 "Models",
                 "Services",
                 "Utilities"
-            ],
-            exclude: [
-                // SwiftUI environment glue — app target only, not portable core.
-                "Utilities/Extensions/EnvironmentValues+Qeloryx.swift"
             ],
             swiftSettings: [
                 .enableUpcomingFeature("BareSlashRegexLiterals"),
