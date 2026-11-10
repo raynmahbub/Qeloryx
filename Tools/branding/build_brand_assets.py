@@ -20,7 +20,7 @@ import pathlib
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-# MARK: - Brand tokens (mirrors DesignSystem/Theme/AstryxColors.swift)
+# MARK: - Brand tokens (mirrors Qeloryx/DesignSystem/Colors/AstryxColors.swift)
 
 MIDNIGHT_900 = (5, 8, 22)      # #050816  Semantic.background
 MIDNIGHT_800 = (15, 23, 42)    # #0F172A
@@ -44,13 +44,13 @@ TAIL_TIP_WIDTH = 30.0          # rounded-tip width, not a sharp point
 
 SUPERSAMPLE = 4
 
-FONT_DIR = pathlib.Path("App/Resources/Fonts")
+FONT_DIR = pathlib.Path("Qeloryx/Resources/Fonts")
 FONT_BOLD = FONT_DIR / "SpaceGrotesk-Bold.ttf"
 FONT_MEDIUM = FONT_DIR / "SpaceGrotesk-Medium.ttf"
 
 OUT_DOCS = pathlib.Path("Docs/Branding")
-OUT_ICONSET = pathlib.Path("App/Resources/Assets.xcassets/AppIcon.appiconset")
-OUT_LOGO = pathlib.Path("App/Resources/Assets.xcassets/BrandLogo.imageset")
+OUT_ICONSET = pathlib.Path("Qeloryx/Resources/Assets.xcassets/AppIcon.appiconset")
+OUT_LOGO = pathlib.Path("Qeloryx/Resources/Assets.xcassets/BrandLogo.imageset")
 
 
 # MARK: - Primitives

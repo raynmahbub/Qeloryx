@@ -24,7 +24,7 @@
    in `THIRD-PARTY-NOTICES.md`. GPL/EULA sources contribute *ideas only* —
    never code — and the resulting file notes its independent origin.
 3. **Core stays Foundation-only.** Audio frameworks live exclusively behind
-   adapter protocols in `Platform/`. Everything testable stays testable.
+   adapter protocols in `Qeloryx/Platform/`. Everything testable stays testable.
 
 ## Source audit (verified)
 
@@ -58,14 +58,14 @@
 
 **What shipped**
 
-- `Core/AstryxAudioEngine/Transitions/CrossfadeCurve.swift` — fade curves
+- `Qeloryx/Services/Player/Transitions/CrossfadeCurve.swift` — fade curves
   (linear, equal-power with constant acoustic power, s-curve smoothstep)
   and the clamped `CrossfadeConfiguration` (0–12 s).
-- `Core/AstryxAudioEngine/Transitions/CrossfadeCapableAudioPlayer.swift` —
+- `Qeloryx/Services/Player/Transitions/CrossfadeCapableAudioPlayer.swift` —
   optional adapter capability: `prepareNext` / `activatePreparedNext` /
   `cancelPreparedNext`. Non-conforming adapters keep hard transitions, so
   the feature is purely additive.
-- `Core/AstryxAudioEngine/Transitions/GaplessTransitionController.swift` —
+- `Qeloryx/Services/Player/Transitions/GaplessTransitionController.swift` —
   pure, deterministic arming logic (fade window, short-track guard,
   shuffle / repeat-one guards, queue wrap-around on repeat-all).
 - `AstryxAudioEngine` — `.setCrossfade` command; the position timer arms
@@ -73,7 +73,7 @@
   a deck-swap that publishes the same events (`trackEnded(.natural)` →
   `trackStarted`) as a hard transition, so every downstream consumer
   (lyrics, library stats, UI) sees seamless behavior for free.
-- `Platform/Audio/GaplessAudioPlayerAdapter.swift` — dual-deck AVPlayer:
+- `Qeloryx/Platform/Audio/GaplessAudioPlayerAdapter.swift` — dual-deck AVPlayer:
   standby deck pre-buffers at zero gain, a 30 Hz dispatch timer walks both
   decks through the curve, retiring-deck end notifications are suppressed,
   mid-fade pause completes the swap instantly, standby failure falls back

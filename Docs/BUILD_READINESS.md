@@ -81,7 +81,7 @@ checks, brace/preprocessor balance, call-site label matching), not by compiling.
 
 | | |
 |---|---|
-| Production Swift files | 119 (`App/ Core/ DesignSystem/ Features/ Platform/`) |
+| Production Swift files | 119+ (previously `App/ Core/ DesignSystem/ Features/ Platform/`; now consolidated under `Qeloryx/` — see `Docs/ARCHITECTURE.md`) |
 | Test Swift files | 20 (154 test methods, up from 110) |
 | Production lines | ~19,900 |
 | Deployment target | iOS 17.0 / macOS 14.0 |

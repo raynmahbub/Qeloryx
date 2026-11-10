@@ -28,15 +28,15 @@ The codebase includes playback and queue components (with gapless/crossfade plan
 
 The app icon, the aurora **Q** mark, and the wordmark lockups are all generated
 from the same source of truth as the interface: the Midnight Aurora tokens in
-`DesignSystem/Theme/AstryxColors.swift`.
+`Qeloryx/DesignSystem/Colors/AstryxColors.swift`.
 
 | Asset | Path |
 |---|---|
-| App icon (all iOS sizes, 1024 marketing) | `App/Resources/Assets.xcassets/AppIcon.appiconset` |
-| In-app mark | `App/Resources/Assets.xcassets/BrandLogo.imageset` |
-| Accent colour (`#3B82F6`) | `App/Resources/Assets.xcassets/AccentColor.colorset` |
+| App icon (all iOS sizes, 1024 marketing) | `Qeloryx/Resources/Assets.xcassets/AppIcon.appiconset` |
+| In-app mark | `Qeloryx/Resources/Assets.xcassets/BrandLogo.imageset` |
+| Accent colour (`#3B82F6`) | `Qeloryx/Resources/Assets.xcassets/AccentColor.colorset` |
 | Lockups and brand sheet | `Docs/Branding/` |
-| Logo typeface (Space Grotesk, OFL-1.1) | `App/Resources/Fonts/` |
+| Logo typeface (Space Grotesk, OFL-1.1) | `Qeloryx/Resources/Fonts/` |
 
 Regenerate everything after any palette change:
 
@@ -78,18 +78,33 @@ For local setup helpers, see [`.github/scripts/bootstrap.sh`](.github/scripts/bo
 
 ## Repository layout
 
+The app follows a layered architecture — composition → views → view models → services → models — with platform adapters isolating Apple frameworks:
+
 ```text
-App/                 SwiftUI app entry point and app resources
-Core/                Portable domain and engine code (one folder per engine)
-DesignSystem/        Shared visual foundations and components
-Features/            One folder per feature: <Feature>/Presentation/ for views,
-                     with ViewModels/ alongside when the feature has them
-Platform/            iOS-specific adapters and integrations
-Tests/               Swift package and app tests (XxxTests.swift naming)
+Qeloryx/             All app sources (single app module under XcodeGen)
+├── App/             Composition root, lifecycle (AppRouter, AppLifecycle, AppDependencies.live())
+├── Models/          Domain value types (Music, Library, Playback, Downloads, Providers, Lyrics, Recommendations)
+├── Views/           SwiftUI screens (Main, Home, Discover, Library, Search, Player, Queue, Lyrics,
+│                    Downloads, AudioLab, Statistics, Social, Settings) + Components/
+├── ViewModels/      One ObservableObject per screen
+├── Services/        Portable domain services (Player, DSP, Library, Downloads, Search, Metadata,
+│                    Recommendations, Lyrics, Providers, Persistence, Security, Networking, …)
+├── Platform/        Apple framework adapters (Audio, Background, MediaControls, FileSystem,
+│                    Notifications, AppleServices, CarPlay, Widgets)
+├── DesignSystem/    Midnight Aurora tokens and components (Theme, Colors, Typography, Spacing,
+│                    Materials, Components, Motion)
+├── Utilities/       Extensions, Diagnostics, Logging, Helpers (event bus, protocols)
+└── Resources/       Assets.xcassets, Fonts, Localizable.xcstrings
+QeloryxTests/        Unit tests, categorized (Unit, Integration, Service, ProviderContract,
+                     AudioEngine, Persistence, Performance)
+QeloryxUITests/      UI tests (Navigation, Playback, Library, Download)
+Configuration/       Shared/Debug/Release .xcconfig build configuration
 Docs/                Architecture decisions, build and release guidance
 .github/scripts/     Local developer and release utilities
 .github/workflows/   CI, build, performance checks, and release automation
 ```
+
+See [`Docs/ARCHITECTURE.md`](Docs/ARCHITECTURE.md) for the full design and the old→new mapping.
 
 ## CI and releases
 
@@ -121,4 +136,4 @@ Use focused branches and pull requests, describe user-visible changes, and add o
 
 ## License
 
-No license file is currently included. Unless a license is added, all rights are reserved and reuse or redistribution is not granted by default.
+Proprietary — all rights reserved. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

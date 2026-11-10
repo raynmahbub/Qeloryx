@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'Core/**'
-      - 'Tests/**'
+      - 'Qeloryx/**'
+      - 'QeloryxTests/**'
       - 'Package.swift'
       - '.github/workflows/performance.yml'
   workflow_dispatch:
@@ -47,8 +47,8 @@ jobs:
       - name: Confirm instrumentation is present
         run: |
           set -euo pipefail
-          test -f Core/Shared/Performance/PerformanceMonitor.swift
-          test -f Platform/System/LaunchOptimizer.swift
+          test -f Qeloryx/Utilities/Diagnostics/PerformanceMonitor.swift
+          test -f Qeloryx/Utilities/Diagnostics/LaunchOptimizer.swift
       - name: Upload performance diagnostics
         if: always()
         uses: actions/upload-artifact@v6

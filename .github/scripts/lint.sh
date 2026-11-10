@@ -8,12 +8,12 @@ if ! command -v swiftlint >/dev/null 2>&1; then
 fi
 swiftlint lint
 
-if grep -R -n --include='*.swift' 'import SwiftUI' Core/; then
-  echo "SwiftUI imports are not expected in Core/." >&2
+if grep -R -n --include='*.swift' 'import SwiftUI' Qeloryx/Models/ Qeloryx/Services/ Qeloryx/Utilities/Helpers/ Qeloryx/Utilities/Diagnostics/; then
+  echo "SwiftUI imports are not expected in the portable domain (Models/Services/Utilities helpers)." >&2
   exit 1
 fi
-if grep -R -n --include='*.swift' 'import AVFoundation' Features/; then
-  echo "AVFoundation imports are not expected in Features/." >&2
+if grep -R -n --include='*.swift' 'import AVFoundation' Qeloryx/Views/; then
+  echo "AVFoundation imports are not expected in Views/." >&2
   exit 1
 fi
 

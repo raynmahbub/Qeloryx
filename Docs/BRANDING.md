@@ -1,7 +1,7 @@
 # QELORYX — Brand Guidelines
 
 Everything here is derived from the interface's own design tokens. If a colour
-below ever disagrees with `DesignSystem/Theme/AstryxColors.swift`, the code
+below ever disagrees with `Qeloryx/DesignSystem/Colors/AstryxColors.swift`, the code
 wins and the artwork is stale — regenerate it.
 
 ## The mark
@@ -38,8 +38,8 @@ wordmark and Medium for secondary uses.
 
 - Wordmark is set in `QELORYX`, all caps, tracking opened by `0.055 × size`
 - PostScript name for `Font.custom` is `SpaceGrotesk-Bold`
-- Bundled at `App/Resources/Fonts/` and registered through `UIAppFonts`
-- Licence text: `App/Resources/Fonts/OFL-SpaceGrotesk.txt`
+- Bundled at `Qeloryx/Resources/Fonts/` and registered through `UIAppFonts`
+- Licence text: `Qeloryx/Resources/Fonts/OFL-SpaceGrotesk.txt`
 - Attribution recorded in `THIRD-PARTY-NOTICES.md`
 
 ## Lockup proportions
@@ -84,9 +84,9 @@ python3 Tools/branding/build_brand_assets.py
 
 The generator writes:
 
-- `App/Resources/Assets.xcassets/AppIcon.appiconset/` — 18 images + `Contents.json`
-- `App/Resources/Assets.xcassets/BrandLogo.imageset/` — 2 images + `Contents.json`
-- `App/Resources/Assets.xcassets/AccentColor.colorset/` — `#3B82F6`
+- `Qeloryx/Resources/Assets.xcassets/AppIcon.appiconset/` — 18 images + `Contents.json`
+- `Qeloryx/Resources/Assets.xcassets/BrandLogo.imageset/` — 2 images + `Contents.json`
+- `Qeloryx/Resources/Assets.xcassets/AccentColor.colorset/` — `#3B82F6`
 - `Docs/Branding/` — 1024/512/256 icons, standalone mark, three lockups
 
 All artwork is first-party, drawn procedurally from the values above.

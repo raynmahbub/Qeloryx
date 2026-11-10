@@ -1,0 +1,5 @@
+// QELORYX — Release configuration
+#include "Shared.xcconfig"
+
+DEBUG = NO
+SWIFT_OPTIMIZATION_LEVEL = -O

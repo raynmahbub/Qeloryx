@@ -12,7 +12,7 @@ The master prompt proposes structural refactoring as Phase 1 and the *foundation
 **Two deviations, both deliberate:**
 
 1. **Foundation before structure.** Persistence → audio correctness → reachability → honesty → *then* structure.
-2. **No `Qeloryx/` folder reshuffle.** The prompt's target tree (a single `Qeloryx/` root containing `App/ Models/ Views/ ViewModels/ Services/`) conflicts with both `Package.swift` (which declares `path: "Core"`, `"DesignSystem"`, `"Platform"`) and `project.yml` (which sources `App`, `Core`, `Features`, `Platform`, `DesignSystem` from the repo root). Moving ~20k LOC to satisfy a diagram would churn every import and every CI path. The current feature-oriented layout is closer to Cassette's actual structure than the prompt's flat tree.
+2. ~~**No `Qeloryx/` folder reshuffle.**~~ **Superseded.** The single `Qeloryx/` root layout (with `App/ Models/ Views/ ViewModels/ Services/ Platform/ DesignSystem/ Utilities/ Resources/`) has since been adopted at the owner's explicit request. `Package.swift` and `project.yml` were retargeted together with the move, CI paths were updated, and the full old→new mapping is recorded in `Docs/ARCHITECTURE.md`. The original concern — that a reshuffle would endanger the iOS build — was mitigated by keeping type names stable inside moved files and updating every build/CI/lint reference in the same change.
 
 Everything else in the prompt's phasing is retained, just re-sequenced.
 
