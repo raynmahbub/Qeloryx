@@ -20,7 +20,8 @@ excluded:
   - .build
   - DerivedData
   - Pods
-  - Tests
+  - QeloryxTests
+  - QeloryxUITests
 
 line_length:
   warning: 120
@@ -63,7 +64,7 @@ custom_rules:
     message: "AVFoundation must be isolated in Platform layer"
     severity: warning
     included:
-      - 'Features/.*\.swift'
+      - 'Qeloryx/Views/.*\.swift'
   
   no_swiftui_in_domain:
     name: "No SwiftUI in Domain/Core"
@@ -71,7 +72,10 @@ custom_rules:
     message: "SwiftUI must stay in Presentation layer only"
     severity: error
     included:
-      - 'Core/.*\.swift'
+      - 'Qeloryx/Models/.*\.swift'
+      - 'Qeloryx/Services/.*\.swift'
+      - 'Qeloryx/Utilities/Helpers/.*\.swift'
+      - 'Qeloryx/Utilities/Diagnostics/.*\.swift'
 
   astrix_prefix:
     name: "Astryx prefix for components"
@@ -79,4 +83,4 @@ custom_rules:
     message: "Reusable components should begin with Astryx"
     severity: warning
     included:
-      - 'DesignSystem/Components/.*\.swift'
+      - 'Qeloryx/DesignSystem/Components/.*\.swift'

@@ -12,12 +12,10 @@ on:
   push:
     branches: [main, 'arena/**']
     paths:
-      - 'App/**'
-      - 'Core/**'
-      - 'DesignSystem/**'
-      - 'Features/**'
-      - 'Platform/**'
-      - 'Tests/**'
+      - 'Qeloryx/**'
+      - 'QeloryxTests/**'
+      - 'QeloryxUITests/**'
+      - 'Configuration/**'
       - 'Package.swift'
       - 'project.yml'
       - '.github/workflows/build.yml'

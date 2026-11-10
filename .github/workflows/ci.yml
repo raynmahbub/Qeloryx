@@ -407,10 +407,10 @@ jobs:
           test -s project.yml
           test -s Package.swift
           test -s Docs/BRANDING.md
-          test -s App/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
-          test -s App/Resources/Assets.xcassets/BrandLogo.imageset/Contents.json
-          test -s App/Resources/Assets.xcassets/AccentColor.colorset/Contents.json
-          test -s App/Resources/Fonts/OFL-SpaceGrotesk.txt
+          test -s Qeloryx/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
+          test -s Qeloryx/Resources/Assets.xcassets/BrandLogo.imageset/Contents.json
+          test -s Qeloryx/Resources/Assets.xcassets/AccentColor.colorset/Contents.json
+          test -s Qeloryx/Resources/Fonts/OFL-SpaceGrotesk.txt
           test -f Docs/Branding/qeloryx-lockup-dark.png
           ! grep -R -nE 'TODO\(broken-link\)' README.md Docs
       - name: Verify brand assets are consistent
@@ -427,7 +427,7 @@ jobs:
           python3 - <<'PYEOF'
           import json, pathlib, struct, sys
 
-          root = pathlib.Path("App/Resources/Assets.xcassets")
+          root = pathlib.Path("Qeloryx/Resources/Assets.xcassets")
           failures = []
 
           for contents in sorted(root.rglob("Contents.json")):

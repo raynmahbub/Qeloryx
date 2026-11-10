@@ -1,0 +1,3 @@
+# Reserved for a future unified logging facility.
+# Diagnostics today live in Qeloryx/Utilities/Diagnostics/ (PerformanceMonitor, LaunchOptimizer);
+# engines emit debug output via debugPrint behind #if DEBUG.

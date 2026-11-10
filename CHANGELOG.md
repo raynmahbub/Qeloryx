@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Repository restructure to the target architecture
+- **Sources consolidated** under a single `Qeloryx/` root and layered as `Models` (value types) ← `Services` (portable engines) ← `ViewModels` ← `Views` (SwiftUI screens), with `Platform/` isolating Apple frameworks and `DesignSystem/` holding Midnight Aurora tokens. `App/` is now only the composition root, lifecycle and router; `Package.swift`, `project.yml`, `Configuration/*.xcconfig`, CI/workflows and lint configs were retargeted to match.
+- **New top-level files**: `LICENSE` (proprietary — all rights reserved), `CONTRIBUTING.md`, `SECURITY.md`, `Docs/ARCHITECTURE.md` (full old→new map).
+- **App layer**: `AppCoordinator` renamed to **`AppRouter`**; launch bookkeeping extracted to `AppLifecycle`; `AppDependencies` split from `AppCompositionRoot.live()`; new `AppDelegate` bridge; new environment key for `QueueControllerProtocol` (with inert `UnconfiguredQueueController`).
+- **Models extracted** from engine files into `Models/{Music,Library,Playback,Downloads,Providers,Lyrics,Recommendations}` (`AstryxTrack`, `AstryxQueue`, `AstryxLyricLine`, `AstryxTasteProfile`, `LibraryStats`, …). New small value types: `AstryxComposer`, `AstryxMusicCredit`, `AstryxPlaylistEntry`, `AstryxLibraryItem`, `AstryxLibrarySnapshot`, `AstryxDownloadQuality`, `AstryxProviderID`, `AstryxProviderCapability`, `AstryxProviderAccount`, `AstryxListeningSignal`.
+- **Feature screens renamed**: Dashboard → **Home**, Discovery → **Discover**, Time Capsule → **Statistics**, Spaces → **Social**, `AstryxPlayerView` → **PlayerView** (same for `PlayerViewModel`); view models moved to flat `ViewModels/` (`HomeViewModel`, `DiscoverViewModel`, `StatisticsViewModel`, `SocialViewModel`, `AudioLabViewModel`, `TasteDNAViewModel` extracted from view files).
+- **New screens**: `Queue` (reorder/remove/jump/clear, engine stays source of truth) and `Settings` (bound to `SettingsRepository` — playback, downloads, privacy, about). New `Views/Components/*` building blocks (Artwork, Cards, Rows, Controls, Sheets, Menus, Loading, EmptyStates).
+- **Tests categorized** into `QeloryxTests/{Unit,Integration,Service,ProviderContract,AudioEngine,Persistence,Performance}Tests`; new `QeloryxUITests/{Navigation,Playback,Library,Download}Tests` smoke suite (launch invariants only); SPM test target path updated; XcodeGen gains a `QeloryxUITests` UI-test target.
+- **Configuration**: `Configuration/{Shared,Debug,Release}.xcconfig` carry SWIFT_VERSION/deployment target/versions; `project.yml` includes them via `configFiles`. `Localizable.xcstrings` added; `DesignSystem/Materials` (`AstryxMaterials`) added.
+- **Build config**: `Package.swift` SPM products unchanged (`QeloryxCore`, `QeloryxDesignSystem`, `QeloryxPlatform`) with new paths; `.swiftlint.yml`/lint script layer checks updated; CI/docs sanity paths updated; brand asset generator paths updated. Historical docs (`Docs/ADR|EPL|IL|SHM`) intentionally retain old paths as record.
+- **License**: proprietary all-rights-reserved `LICENSE` added; README updated accordingly.
+
 ### Added — Branding
 - **App icon** — generated `AppIcon.appiconset` (18 images: iPhone 20/29/40/60 pt @2x/@3x, iPad 20/29/40/76 pt @1x/@2x and 83 pt @2x, plus the 1024 marketing icon). `project.yml` already named `AppIcon` but no asset catalog existed, so builds shipped the blank placeholder icon.
 - **Brand mark** — the aurora **Q** monogram: a geometric ring with a tapered 45° tail, filled with the Midnight Aurora gradient (`#3B82F6` → `#8B5CF6` → `#06B6D4`) over the `#050816` field.

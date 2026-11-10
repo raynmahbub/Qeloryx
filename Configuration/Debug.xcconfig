@@ -1,0 +1,6 @@
+// QELORYX — Debug configuration
+#include "Shared.xcconfig"
+
+DEBUG = YES
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+ENABLE_TESTABILITY = YES
